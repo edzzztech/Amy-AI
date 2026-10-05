@@ -73,9 +73,52 @@ class SentenceBufferTest {
         assertTrue(spoken.isEmpty())
     }
 
+    /**
+     * Every token size, because where the stream happens to break decides
+     * whether a full stop arrives with or without what follows it. The
+     * original version of the test below passed only because its seven-
+     * character tokens never ended on the "." of "4.99".
+     */
+    private fun assertAtEveryTokenSize(text: String, expected: List<String>) {
+        (1..12).forEach { size ->
+            assertEquals("token size $size", expected, stream(text, size).first)
+        }
+    }
+
     @Test
     fun `decimals do not split a sentence`() {
-        val (spoken, _) = stream("It costs 4.99 today. Shall I order it?")
-        assertEquals(listOf("It costs 4.99 today.", "Shall I order it?"), spoken)
+        assertAtEveryTokenSize(
+            "It costs 4.99 today. Shall I order it?",
+            listOf("It costs 4.99 today.", "Shall I order it?"),
+        )
+    }
+
+    @Test
+    fun `titles and initials do not end a sentence`() {
+        assertAtEveryTokenSize(
+            "Your appointment with Dr. Patel is at noon. J. K. Rowling wrote it.",
+            listOf("Your appointment with Dr. Patel is at noon.", "J. K. Rowling wrote it."),
+        )
+        // The opening clause is spoken early on purpose; "e.g." is not a break.
+        assertAtEveryTokenSize(
+            "Bring a snack, e.g. fruit, before the run. Then stretch.",
+            listOf("Bring a snack,", "e.g. fruit, before the run.", "Then stretch."),
+        )
+    }
+
+    @Test
+    fun `thousands and clock times are not clause breaks`() {
+        assertAtEveryTokenSize(
+            "There were 12,500 people at 10:30 in the hall. It was packed.",
+            listOf("There were 12,500 people at 10:30 in the hall.", "It was packed."),
+        )
+    }
+
+    @Test
+    fun `a sentence ending inside quotes or brackets still ends`() {
+        assertAtEveryTokenSize(
+            "She said \"see you soon.\" Then she left (quietly.) The end.",
+            listOf("She said \"see you soon.\"", "Then she left (quietly.)", "The end."),
+        )
     }
 }

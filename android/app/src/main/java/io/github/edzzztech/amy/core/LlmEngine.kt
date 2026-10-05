@@ -65,8 +65,10 @@ class SentenceBuffer {
     }
 
     private fun firstSentence(): Int {
-        val m = SENTENCE_END.find(buffer)
-        return m?.range?.last?.plus(1) ?: -1
+        for (m in SENTENCE_END.findAll(buffer)) {
+            if (!isAbbreviation(m.range.first)) return m.range.last + 1
+        }
+        return -1
     }
 
     private fun firstClause(): Int {
@@ -75,19 +77,45 @@ class SentenceBuffer {
         // is found again on every token, so nothing is ever flushed.
         for (m in CLAUSE_END.findAll(buffer)) {
             val end = m.range.last + 1
-            if (end > MIN_FIRST_CHUNK) return end
+            if (end > MIN_FIRST_CHUNK && !isAbbreviation(m.range.first)) return end
         }
         return -1
+    }
+
+    /**
+     * A full stop that does not end a sentence: "Dr. Patel", "J. K. Rowling",
+     * "e.g. this". Treating one as an ending makes her say "Doctor." and then,
+     * after a pause, "Patel".
+     */
+    private fun isAbbreviation(at: Int): Boolean {
+        if (buffer[at] != '.') return false
+        var start = at
+        while (start > 0 && (buffer[start - 1].isLetter() || buffer[start - 1] == '.')) start--
+        val word = buffer.substring(start, at).lowercase()
+        return word in ABBREVIATIONS ||
+            (word.length == 1 && word[0].isLetter()) ||
+            '.' in word
     }
 
     private companion object {
         const val MIN_FIRST_CHUNK = 11
 
+        // Punctuation counts only once whitespace follows it. Text arrives in
+        // fragments, so a full stop at the end of what has arrived so far may
+        // be the "." of "4.99" or "Dr." with the rest still to come; taking it
+        // as an ending split numbers and names in two.
+        //
         // A plain string with every backslash doubled: in a raw string
         // ("""...""") the $ that joins these patterns is awkward to write, and
         // a single backslash in a plain one is a Kotlin escape, not a regex one.
-        private const val WS_OR_END = "([ \\t\\n\\r]|\\z)"
-        val SENTENCE_END = Regex("[.!?]$WS_OR_END")
-        val CLAUSE_END = Regex("[,;:.!?]$WS_OR_END")
+        private const val CLOSERS = "[\"')\\]]*"
+        private const val WS = "[ \\t\\n\\r]"
+        val SENTENCE_END = Regex("[.!?]$CLOSERS$WS")
+        val CLAUSE_END = Regex("(?:[,;:]|[.!?]$CLOSERS)$WS")
+
+        val ABBREVIATIONS = setOf(
+            "mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "vs", "etc",
+            "approx", "fig", "inc", "ltd", "co", "mt", "ft",
+        )
     }
 }

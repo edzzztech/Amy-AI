@@ -7489,9 +7489,17 @@ class AmyApp:
             gui().post(lambda: ov.set_heard(text))
 
     def run_js(self, script_str):
+        """Send a script to the page without waiting for it to run.
+
+        Nothing reads the result, but evaluate_js made the calling thread wait
+        for one - every log line, card and status change held its worker until
+        the page got round to it, up to five seconds while the UI was busy.
+        Scripts still run in the order they were sent.
+        """
         if self.window and self.ui_ready:
             try:
-                self.window.evaluate_js(script_str)
+                send = getattr(self.window, "evaluate_js_async", None) or self.window.evaluate_js
+                send(script_str)
             except Exception as e:
                 log_debug(f"JS Eval Error: {e}")
 
@@ -7843,10 +7851,14 @@ class AmyApp:
         if self.audio_out is not None:
             try:
                 pcm, rate = AudioOut.decode_mp3(data)
-                # Skip the leading silence neural voices pad their audio with.
+                # Neural voices pad both ends with silence. Trim the start,
+                # and the end down to a natural pause: the full padding, on
+                # top of the next sentence's own, left dead air between
+                # sentences.
                 loud = _np.nonzero(_np.abs(pcm) > 400)[0]
                 if loud.size:
-                    pcm = pcm[max(0, int(loud[0]) - int(rate * 0.03)):]
+                    pcm = pcm[max(0, int(loud[0]) - int(rate * 0.03)):
+                              int(loud[-1]) + int(rate * 0.18)]
                 self.audio_out.play(pcm, rate)
                 while self.audio_out.playing() and self.is_speaking:
                     time.sleep(0.02)
@@ -8127,6 +8139,13 @@ class AmyApp:
                     continue
                 if text:
                     self.is_speaking = True
+                    # An interruption between the check above and this line
+                    # would have its is_speaking=False undone, and the
+                    # interrupted sentence played anyway.
+                    if gen != self._speech_gen:
+                        self.is_speaking = False
+                        self.speech_queue.task_done()
+                        continue
                     self.run_js("updateSpeechAnimation(true)")
                     self.overlay_state("speaking")
 
@@ -8189,7 +8208,9 @@ class AmyApp:
         talks. Anything queued before an interruption is dropped."""
         text = str(text or "").strip()
         if text:
-            self.speech_queue.put((self._speech_gen, text))
+            gen = self._speech_gen
+            for part in self._speech_parts(text):
+                self.speech_queue.put((gen, part))
 
     def stop_speech(self):
         # Invalidate everything queued or still being generated for this turn.
@@ -14551,6 +14572,79 @@ difference() { plate_body(); holes(); }''',
             for k, _ in oldest:
                 self.response_cache.pop(k, None)
 
+    # Words whose full stop does not end a sentence.
+    _ABBREVIATIONS = {"mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "vs", "etc",
+                      "approx", "fig", "inc", "ltd", "co", "mt", "ft"}
+
+    @staticmethod
+    def _sentence_end(buffer):
+        """End of the first complete sentence in `buffer`, or 0.
+
+        Punctuation counts only once whitespace follows it. A streamed reply
+        arrives in fragments, so a full stop at the end of what has arrived so
+        far may be the "." of "4.99" or of "Dr." with the rest still coming;
+        taking it as an ending had her say "four." and then "ninety-nine".
+        Titles, initials and dotted abbreviations ("e.g.") are not endings.
+        """
+        for m in re.finditer(r'[.!?]["\')\]]*\s', buffer):
+            at = m.start()
+            if buffer[at] == ".":
+                start = at
+                while start > 0 and (buffer[start - 1].isalpha() or buffer[start - 1] == "."):
+                    start -= 1
+                word = buffer[start:at].lower()
+                if (word in AmyApp._ABBREVIATIONS or "." in word
+                        or (len(word) == 1 and word.isalpha())):
+                    continue
+            return m.end()
+        return 0
+
+    @staticmethod
+    def _speech_parts(text, single_limit=160, min_part=40):
+        """Split text for the speech queue, sentence by sentence.
+
+        Queued whole, a paragraph was synthesised in full before she said a
+        word. Queued per sentence, the first plays while the rest are still
+        being prepared. Short pieces are joined to the next, so she does not
+        speak in fragments.
+        """
+        if len(text) <= single_limit:
+            return [text]
+        parts, rest = [], text
+        while rest:
+            end = AmyApp._sentence_end(rest + " ")
+            piece = rest[:end].strip() if end else rest.strip()
+            rest = rest[end:] if end else ""
+            if not piece:
+                continue
+            if parts and len(parts[-1]) < min_part:
+                parts[-1] = parts[-1] + " " + piece
+            else:
+                parts.append(piece)
+        return parts
+
+    @staticmethod
+    def _take_speakable(buffer, spoke_anything):
+        """Take whatever is ready to speak off the front of a streamed reply.
+
+        Returns (chunks, rest). The first chunk of a reply may be a clause
+        rather than a sentence, so audio starts sooner; after that it waits
+        for whole sentences.
+        """
+        chunks = []
+        while True:
+            end = (AmyApp._first_speakable_chunk(buffer)
+                   if not (spoke_anything or chunks) else 0)
+            if not end:
+                end = AmyApp._sentence_end(buffer)
+                if not end:
+                    break
+            text = buffer[:end].strip()
+            buffer = buffer[end:]
+            if text:
+                chunks.append(text)
+        return chunks, buffer
+
     @staticmethod
     def _first_speakable_chunk(buffer):
         """Find the earliest natural place to start talking.
@@ -14560,13 +14654,15 @@ difference() { plate_body(); holes(); }''',
         sound out of the speakers much sooner.
         """
         # A complete sentence is always a good boundary.
-        m = re.search(r'[.!?](?:\s|$)', buffer)
-        if m:
-            return m.end()
+        end = AmyApp._sentence_end(buffer)
+        if end:
+            return end
         # Otherwise take a clause once we have enough words to sound natural.
+        # Each separator includes its space: a bare "," or ":" split "12,500"
+        # and "10:30" in two.
         if len(buffer.split()) >= 8:
             m2 = None
-            for sep in (';', ' — ', ' – ', ',', ':'):
+            for sep in ('; ', ' — ', ' – ', ', ', ': '):
                 idx = buffer.find(sep)
                 if idx > 20:
                     m2 = idx + len(sep)
@@ -15696,8 +15792,10 @@ difference() { plate_body(); holes(); }''',
             try:
                 try:
                     self._whisper = WhisperModel(name, device="cuda", compute_type="int8_float16")
+                    self._whisper_on_gpu = True
                 except Exception:
                     self._whisper = WhisperModel(name, device="cpu", compute_type="int8")
+                    self._whisper_on_gpu = False
                 log_debug(f"Whisper '{name}' loaded.")
             except Exception as e:
                 log_debug(f"Whisper unavailable: {e}")
@@ -15710,12 +15808,31 @@ difference() { plate_body(); holes(); }''',
                 apps = ", ".join(self.app_index.names()[:20])
             except Exception:
                 apps = ""
-            segments, _info = self._whisper.transcribe(
-                pcm, language="en", beam_size=1, vad_filter=False,
-                initial_prompt=f"Talking to Amy, a desktop assistant. {apps}")
-            text = " ".join(seg.text for seg in segments).strip()
-            # Whisper invents these on near-silence.
-            if re.fullmatch(r"(thanks? (you|for watching)[.!]*|you[.!]*|\.+|bye[.!]*)", text.lower()):
+            prompt = f"Talking to Amy, a desktop assistant. {apps}"
+            try:
+                segments, _info = self._whisper.transcribe(
+                    pcm, language="en", beam_size=1, vad_filter=False, initial_prompt=prompt)
+                # Segments are generated lazily: GPU failures surface here.
+                text = " ".join(seg.text for seg in segments).strip()
+            except Exception as e:
+                if not getattr(self, "_whisper_on_gpu", False):
+                    raise
+                # On Windows the GPU model often *loads* without NVIDIA's
+                # runtime libraries and then fails on every transcription.
+                # Without this she stayed on the broken GPU model for good.
+                log_debug(f"Whisper on GPU failed ({e}); moving to CPU.")
+                from faster_whisper import WhisperModel
+                name = CONFIG.get("assistant", {}).get("whisper_model", "small.en")
+                self._whisper = WhisperModel(name, device="cpu", compute_type="int8")
+                self._whisper_on_gpu = False
+                segments, _info = self._whisper.transcribe(
+                    pcm, language="en", beam_size=1, vad_filter=False, initial_prompt=prompt)
+                text = " ".join(seg.text for seg in segments).strip()
+            # Whisper invents these on near-silence - but people also say
+            # "thank you" to her, so only discard them when the audio was quiet.
+            quiet = pcm.size == 0 or float(_np.sqrt(_np.mean(pcm * pcm))) < 0.01
+            if quiet and re.fullmatch(r"(thanks? (you|for watching)[.!]*|you[.!]*|\.+|bye[.!]*)",
+                                      text.lower()):
                 return ""
             return text.lower()
         except Exception as e:
@@ -16759,9 +16876,11 @@ RULES
         self.run_js(script)
         for kind, win in list(self.extra_windows.items()):
             try:
-                win.evaluate_js(script)
+                send = getattr(win, "evaluate_js_async", None) or win.evaluate_js
+                send(script)
             except Exception:
-                # Window probably closed underneath us.
+                # Window probably closed underneath us. (Closing also removes
+                # it through its closed event.)
                 self.extra_windows.pop(kind, None)
 
     @staticmethod
@@ -18953,22 +19072,10 @@ RULES
                     if piece:
                         reply_parts.append(piece)
                         speak_buffer += piece
-                        # Flush at the earliest natural boundary. The FIRST chunk
-                        # may be a clause rather than a full sentence, so audio
-                        # starts sooner; after that we wait for sentences.
-                        while True:
-                            end = (self._first_speakable_chunk(speak_buffer)
-                                   if not spoke_anything else 0)
-                            if not end:
-                                m = re.search(r'[.!?](\s|$)', speak_buffer)
-                                if not m:
-                                    break
-                                end = m.end()
-                            chunk_text = speak_buffer[:end].strip()
-                            speak_buffer = speak_buffer[end:]
-                            if chunk_text:
-                                self.speak(chunk_text)
-                                spoke_anything = True
+                        ready, speak_buffer = self._take_speakable(speak_buffer, spoke_anything)
+                        for chunk_text in ready:
+                            self.speak(chunk_text)
+                            spoke_anything = True
                     if chunk.get("done"):
                         break
 
