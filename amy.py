@@ -3409,8 +3409,6 @@ class RemoteBridge:
     phone can ask for status, send a command, and nothing else.
     """
 
-    PRIVATE_PREFIXES = ("10.", "192.168.", "127.", "169.254.", "::1")
-
     def __init__(self, app):
         self.app = app
         self.server = None
@@ -3447,7 +3445,27 @@ class RemoteBridge:
 
     @classmethod
     def _is_private(cls, addr):
-        return str(addr).startswith(cls.PRIVATE_PREFIXES)
+        """True for loopback, private and link-local addresses, v4 or v6.
+
+        This used to compare against a hand-written list of prefixes, which
+        missed 172.16.0.0/12 entirely - a range plenty of routers, hotspots and
+        office networks hand out - so a phone on one was always refused. The
+        ipaddress module knows every reserved range, IPv6 included.
+        """
+        import ipaddress
+        try:
+            ip = ipaddress.ip_address(str(addr).split("%")[0])
+        except ValueError:
+            return False
+        # An IPv4 address carried in an IPv6 socket (::ffff:192.168.1.5).
+        if ip.version == 6 and ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        # 100.64.0.0/10 is "shared" space to the ipaddress module, not private,
+        # but it is the range Tailscale assigns - and Tailscale is what the
+        # documentation recommends for reaching the PC away from home.
+        if ip.version == 4 and ip in ipaddress.ip_network("100.64.0.0/10"):
+            return True
+        return ip.is_private or ip.is_loopback or ip.is_link_local
 
     # --- lifecycle -------------------------------------------------------
     def start(self, announce=True):
@@ -3488,7 +3506,11 @@ class RemoteBridge:
                 if not bridge._is_private(self.client_address[0]):
                     self._reject(403, "local network only")
                     return False
-                if self.headers.get("X-Amy-Token", "") != RemoteBridge.token():
+                # Constant-time comparison: != stops at the first differing
+                # character, which leaks how much of a guess was right.
+                import hmac
+                given = self.headers.get("X-Amy-Token", "")
+                if not hmac.compare_digest(given.encode(), RemoteBridge.token().encode()):
                     self._reject(401, "bad pairing code")
                     return False
                 return True
@@ -4284,7 +4306,7 @@ HTML_UI = r"""
             color: #ff5c7a; width: 30px; height: 26px; border-radius: 6px; cursor: pointer;
         }
         .stage-close:hover { background: #ff2e63; color: #fff; }
-        .stage-body { position: absolute; top: 70px; right: 60px; bottom: 96px; left: 60px; display: flex; gap: 18px; }
+        .stage-body { position: absolute; top: 70px; right: 60px; bottom: 96px; left: 60px; display: flex;  }
         .stage-bar {
             position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
             display: flex;  z-index: 6; pointer-events: auto;
@@ -4303,7 +4325,7 @@ HTML_UI = r"""
         /* CAD stage: rotating model centred, controls either side */
         #cadCanvas { width: 100%; height: 100%; display: block; }
         .cad-centre { flex: 1.4; position: relative; display: flex; align-items: center; justify-content: center; }
-        .cad-side { width: 300px; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+        .cad-side { width: 300px; display: flex; flex-direction: column;  min-height: 0; }
         /* ===== FULLSCREEN CAMERA MODE ===== */
         /* The feed fills the app; the reactor shrinks and docks bottom-right,
            blending into the video rather than sitting on top of it. */
@@ -4360,7 +4382,7 @@ HTML_UI = r"""
         .reactor-container.docked.active-speech, 
         .reactor-container.docked.listening { opacity: 0.9; }
         .widget-header:active { cursor: grabbing; }
-        .header-title-wrap { display: flex; align-items: center; gap: 8px; }
+        .header-title-wrap { display: flex; align-items: center;  }
         .status-dot { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 8px var(--accent); }
         .close-widget-btn { background: none; border: none; color: var(--accent); font-weight: bold; cursor: pointer; font-size: 15px; line-height: 1; }
         .close-widget-btn:hover { color: #ff2e63; }
@@ -4396,7 +4418,7 @@ HTML_UI = r"""
 
         /* Dynamic cards */
         #cardsGrid { position: absolute; top: 70px; left: 480px; width: 360px; max-height: calc(100vh - 170px);
-            overflow-y: auto; display: flex; flex-direction: column; gap: 12px; pointer-events: auto; z-index: 15; }
+            overflow-y: auto; display: flex; flex-direction: column;  pointer-events: auto; z-index: 15; }
         .amy-inapp-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
             backdrop-filter: blur(10px); padding: 12px; color: #e2e8f0; box-shadow: 0 8px 26px rgba(0,0,0,0.5);
             animation: fadeInCard 0.25s ease-out; }
@@ -4408,7 +4430,7 @@ HTML_UI = r"""
         .card-type-badge { font-size: 9px; background: var(--accent-dim); color: var(--accent);
             padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border-lit); text-transform: uppercase; }
         .card-body-content { font-size: 11px; line-height: 1.5; margin-bottom: 8px; max-height: 200px; overflow-y: auto; }
-        .card-actions-bar { display: flex; justify-content: flex-end; gap: 6px; }
+        .card-actions-bar { display: flex; justify-content: flex-end;  }
 
         /* Chat */
         .chat-messages { flex: 1; padding: 16px; overflow-y: auto; font-size: 12px; line-height: 1.6; color: var(--text-dim); user-select: text; }
@@ -4420,14 +4442,14 @@ HTML_UI = r"""
             padding: 0 16px; margin-left: 8px; font-weight: bold; cursor: pointer; letter-spacing: 1px; }
         .chat-input-area button:hover { box-shadow: 0 0 14px var(--accent); }
 
-        .widget-body-pad { padding: 16px; font-size: 12px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+        .widget-body-pad { padding: 16px; font-size: 12px; display: flex; flex-direction: column;  flex: 1; }
         .telemetry-bar-bg { background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 6px; height: 10px; width: 100%; overflow: hidden; padding: 1px; }
         .telemetry-fill { background: linear-gradient(90deg, rgba(94,234,212,0.4), var(--accent)); height: 100%; width: 0%; border-radius: 4px; transition: width 0.4s ease; box-shadow: 0 0 8px var(--accent); }
         .scratchpad-area { flex: 1; background: rgba(0,0,0,0.5); border: 1px solid var(--border); border-radius: 8px; color: #fff; padding: 10px; font-size: 12px; resize: none; outline: none; user-select: text; }
         .scratchpad-area:focus { border-color: var(--accent); }
         .action-btn { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--border-lit); border-radius: 8px; padding: 8px 12px; font-weight: bold; cursor: pointer; font-size: 11px; text-align: center; letter-spacing: 1px; transition: all 0.2s ease; }
         .action-btn:hover { background: var(--accent); color: var(--bg); box-shadow: 0 0 12px var(--accent); }
-        .todo-list-container { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; user-select: text; }
+        .todo-list-container { flex: 1; overflow-y: auto; display: flex; flex-direction: column;  user-select: text; }
         .todo-item { display: flex; align-items: center; justify-content: space-between; background: rgba(94,234,212,0.05); padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(94,234,212,0.2); }
         .todo-item span { font-size: 11px; color: #e2e8f0; }
 
@@ -4533,7 +4555,7 @@ HTML_UI = r"""
         .reactor-container.convo-mode .core-center {
             position: relative; width: auto; height: auto; background: none; border: none;
             box-shadow: none; color: #fff; display: flex; flex-direction: column;
-            align-items: center; gap: 6px;
+            align-items: center; 
             /* The sphere is the mark; the name sits under it as a caption. */
             transform: translateY(132px); }
         /* The blob is the logo — no wordmark, no state caption under it. */
@@ -4709,13 +4731,13 @@ HTML_UI = r"""
 
         /* Proactive suggestions */
         #amySuggest { position: fixed; right: 18px; top: 54px; z-index: 900; display: flex;
-            flex-direction: column; gap: 10px; max-width: 360px; pointer-events: none; }
+            flex-direction: column;  max-width: 360px; pointer-events: none; }
         .amy-suggestion { pointer-events: auto; background: var(--glass-strong); border: 1px solid var(--border);
             border-left: 3px solid var(--accent); border-radius: 12px; padding: 12px 14px; color: var(--text);
             font-size: 13px; box-shadow: 0 14px 40px rgba(0,0,0,0.5); backdrop-filter: blur(20px);
             animation: amyIn .25s ease-out; }
         .amy-suggestion.warn { border-left-color: #f59e0b; }
-        .amy-suggestion .row { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
+        .amy-suggestion .row { display: flex;  margin-top: 10px; justify-content: flex-end; }
         .amy-suggestion button { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text);
             border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 12px; }
         .amy-suggestion button.go { background: var(--accent); color: #04221d; border-color: transparent; font-weight: 600; }
@@ -4724,7 +4746,7 @@ HTML_UI = r"""
         /* ---- tidy layer: captions, activity chips, sleep screen ---- */
         #amyCaptions { position: fixed; left: 50%; bottom: 128px; transform: translateX(-50%);
             width: min(760px, calc(100vw - 32px)); z-index: 850; pointer-events: none;
-            display: flex; flex-direction: column; align-items: center; gap: 6px; }
+            display: flex; flex-direction: column; align-items: center;  }
         .amy-cap { max-width: 100%; text-align: center; font-size: 15px; line-height: 1.45;
             color: #e6edf3; text-shadow: 0 1px 8px rgba(0,0,0,0.85); opacity: 0;
             transform: translateY(6px); transition: opacity .35s ease, transform .35s ease;
@@ -4736,7 +4758,7 @@ HTML_UI = r"""
             bottom: 84px !important; transform: translateX(-50%); flex-direction: row !important;
             flex-wrap: wrap; justify-content: center; gap: 6px; z-index: 860 !important;
             max-width: calc(100vw - 32px); pointer-events: none; }
-        .amy-chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px 4px 9px;
+        .amy-chip { display: inline-flex; align-items: center;  padding: 4px 11px 4px 9px;
             border-radius: 999px; font-size: 11px; color: #cfd8dc; background: rgba(16,18,20,0.78);
             border: 1px solid rgba(207,227,247,0.16); backdrop-filter: blur(8px);
             animation: chipIn .25s ease; transition: opacity .4s; }
@@ -4784,6 +4806,26 @@ HTML_UI = r"""
         .chat-input-area > * + * { margin-left: 6px; }
         .spotify-controls > * + * { margin-left: 12px; }
         .tb-lines > * + * { margin-left: 3px; }
+    
+        /* Flex containers from the rest of the UI: same Chromium 83 gap
+           problem as the chrome above. Without these their children sat
+           touching - cards, action buttons, to-dos, suggestions. */
+        .stage-body > * + * { margin-left: 18px; }
+        .cad-side > * + * { margin-top: 10px; }
+        .header-title-wrap > * + * { margin-left: 8px; }
+        #cardsGrid > * + * { margin-top: 12px; }
+        .card-actions-bar > * + * { margin-left: 6px; }
+        .widget-body-pad > * + * { margin-top: 10px; }
+        .todo-list-container > * + * { margin-top: 6px; }
+        .reactor-container .core-center > * + * { margin-top: 6px; }
+        .reactor-container.listening .core-center > * + * { margin-top: 6px; }
+        .reactor-container.wake-triggered .core-center > * + * { margin-top: 6px; }
+        .reactor-container.active-speech .core-center > * + * { margin-top: 6px; }
+        .reactor-container.convo-mode .core-center > * + * { margin-top: 6px; }
+        #amySuggest > * + * { margin-top: 10px; }
+        .amy-suggestion .row > * + * { margin-left: 8px; }
+        #amyCaptions > * + * { margin-top: 6px; }
+        .amy-chip > * + * { margin-left: 7px; }
     </style>
 </head>
 <body>
@@ -14608,8 +14650,30 @@ difference() { plate_body(); holes(); }''',
         # path, its contents were matched as instructions, so a document that
         # merely mentioned "shutdown" would close Amy, and one that said
         # "open Chrome" would open it.
-        threading.Thread(target=self._converse, args=(prompt,), daemon=True).start()
+        threading.Thread(target=self._converse_attachment, args=(prompt, name),
+                         daemon=True).start()
         return True
+
+    def _converse_attachment(self, prompt, name):
+        """Answer about a file, then shrink what stays in the rolling history.
+
+        The last sixteen turns go into every prompt verbatim, so a 24,000
+        character document left in history was resent with each of the next
+        sixteen messages - slowing every one of them and pushing the system
+        prompt and memory out of the model's context. A short excerpt keeps
+        follow-ups about the opening working without dragging the whole file
+        along.
+        """
+        try:
+            self._converse(prompt)
+        finally:
+            excerpt_chars = int(CONFIG.get("assistant", {}).get("attach_history_chars", 1500))
+            for turn in reversed(self.memory.get("chat_history", [])):
+                if turn.get("role") == "user" and turn.get("content") == prompt:
+                    turn["content"] = (f"(Attached file: {name} - excerpt)\n"
+                                       + prompt[:excerpt_chars])
+                    break
+            self.save_memory()
 
     def _ask_for_file(self):
         """Open a native file picker on the UI thread."""
@@ -14723,26 +14787,49 @@ difference() { plate_body(); holes(); }''',
         return True
 
     def _due_routines(self, now=None):
-        """Routines whose minute has arrived and which have not run in it yet."""
+        """Routines whose scheduled time has passed since the last check.
+
+        The first version fired only if the check ran *during* the scheduled
+        minute. It shares a loop with the proactive engine, whose screen-reading
+        step can outlast a minute, so a routine could simply never run. Now each
+        check covers everything scheduled since the previous one, up to an
+        hour back, so a slow loop delays a routine instead of losing it.
+        """
         now = now or datetime.datetime.now()
-        stamp = now.strftime("%Y-%m-%d %H:%M")
+        since = getattr(self, "_routine_checked_at", None)
+        # First check after launch: look back one minute, not to midnight, so
+        # opening Amy at noon does not fire the 8am routine.
+        if since is None or since > now or (now - since).total_seconds() > 3600:
+            since = now - datetime.timedelta(minutes=1)
+        self._routine_checked_at = now
+
         due = []
         for r in self._routines():
             if not r.get("enabled", True):
                 continue
-            if r.get("at") != now.strftime("%H:%M"):
+            try:
+                hh, mm = [int(x) for x in str(r.get("at", "")).split(":")[:2]]
+            except (ValueError, TypeError):
                 continue
-            days = r.get("days", "daily")
-            if isinstance(days, list) and now.weekday() not in days:
-                continue
-            if days == "weekdays" and now.weekday() > 4:
-                continue
-            if days == "weekends" and now.weekday() < 5:
-                continue
-            if self._routine_last.get(r.get("name")) == stamp:
-                continue
-            self._routine_last[r.get("name")] = stamp
-            due.append(r)
+            # The scheduled moment on whichever day falls inside (since, now].
+            for day_offset in (0, -1):
+                day = (now + datetime.timedelta(days=day_offset)).date()
+                moment = datetime.datetime.combine(day, datetime.time(hh % 24, mm % 60))
+                if not (since < moment <= now):
+                    continue
+                days = r.get("days", "daily")
+                wd = moment.weekday()
+                if isinstance(days, list) and wd not in days:
+                    continue
+                if days == "weekdays" and wd > 4:
+                    continue
+                if days == "weekends" and wd < 5:
+                    continue
+                key = moment.strftime("%Y-%m-%d %H:%M")
+                if self._routine_last.get(r.get("name")) == key:
+                    continue
+                self._routine_last[r.get("name")] = key
+                due.append(r)
         return due
 
     def run_due_routines(self):
