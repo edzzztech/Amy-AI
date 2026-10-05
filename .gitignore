@@ -34,3 +34,9 @@ android/local.properties
 android/.idea/
 *.apk
 *.aab
+
+# Model bundles - far too large for git, and personal to each install
+*.task
+*.litertlm
+*.gguf
+*.bin

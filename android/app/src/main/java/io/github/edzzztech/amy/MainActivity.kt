@@ -33,6 +33,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import io.github.edzzztech.amy.automation.Commands
 import io.github.edzzztech.amy.core.*
+import io.github.edzzztech.amy.ui.Orb
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -128,11 +129,19 @@ class MainActivity : ComponentActivity() {
      */
     private suspend fun converse(prompt: String, spoken: Boolean) {
         if (!llm.isLoaded) {
-            val file = llm.defaultModelFile()
+            val file = llm.findModel()
+            if (file == null) {
+                finish(
+                    "I have no model yet. Put a .task model in ${llm.expectedPath()} " +
+                        "and ask me again.",
+                    spoken = false,
+                )
+                return
+            }
             if (!llm.load(file.absolutePath)) {
                 finish(
-                    "I have no model loaded. Push a .task model to " +
-                        "${file.absolutePath} and ask me again.",
+                    "I found ${file.name} but couldn't load it. It may be the wrong " +
+                        "format, or too large for this phone's memory.",
                     spoken = false,
                 )
                 return
@@ -382,7 +391,7 @@ private fun Home(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(24.dp))
-                Orb(active = state != Listening.Idle)
+                Orb(state = state, modifier = Modifier.size(190.dp))
                 Spacer(Modifier.height(18.dp))
                 Text(
                     when (state) {
@@ -479,23 +488,4 @@ private fun Home(
             }
         }
     }
-}
-
-@Composable
-private fun Orb(active: Boolean) {
-    Box(
-        Modifier
-            .size(if (active) 172.dp else 156.dp)
-            .clip(CircleShape)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFF5EEAD4),
-                        Color(0xFFA78BFA),
-                        Color(0xFF6D48CE),
-                    ),
-                    radius = 380f,
-                )
-            )
-    )
 }

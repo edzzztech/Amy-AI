@@ -29,8 +29,24 @@ class MediaPipeLlm(private val context: Context) : LlmEngine {
     override val isLoaded: Boolean
         get() = engine != null
 
-    /** Where a pushed model is expected to live. */
-    fun defaultModelFile(): File = File(context.getExternalFilesDir(null), "model.task")
+    /** The folder a pushed model is expected to live in. */
+    fun modelDir(): File? = context.getExternalFilesDir(null)
+
+    /**
+     * Any .task bundle in the app's files directory, largest first.
+     *
+     * Deliberately not a fixed filename: the published models are called things
+     * like Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.task, and making someone
+     * rename a 555 MB file to model.task is a pointless step to get wrong.
+     */
+    fun findModel(): File? =
+        modelDir()
+            ?.listFiles { f -> f.isFile && f.extension.lowercase() == "task" && f.length() > 0 }
+            ?.maxByOrNull { it.length() }
+
+    /** Where to tell the user to put it. */
+    fun expectedPath(): String =
+        modelDir()?.absolutePath ?: "the app's files directory"
 
     override suspend fun load(modelPath: String): Boolean {
         unload()
