@@ -176,7 +176,7 @@
     --line-strong:rgba(0,0,0,.18);
     --text:#15171c;
     --muted:#5c6170;
-    --accent:#0d9488;
+    --accent:#0b7a70;
     --accent-2:#7c3aed;
     --accent-ink:#ffffff;
     --glow:rgba(13,148,136,.12);
@@ -191,7 +191,7 @@
       --line-strong:rgba(0,0,0,.18);
       --text:#15171c;
       --muted:#5c6170;
-      --accent:#0d9488;
+      --accent:#0b7a70;
       --accent-2:#7c3aed;
       --accent-ink:#ffffff;
       --glow:rgba(13,148,136,.12);
@@ -216,6 +216,21 @@
   code{font-family:var(--mono);font-size:.875em}
 
   .wrap{max-width:var(--maxw);margin:0 auto;padding:0 20px}
+
+  /* Keyboard users land here first; invisible until focused. */
+  .skip{
+    position:absolute;left:-9999px;top:0;z-index:200;
+    background:var(--accent);color:var(--accent-ink);
+    padding:12px 18px;border-radius:0 0 10px 0;font-weight:600;text-decoration:none;
+  }
+  .skip:focus{left:0}
+
+  /* Visible keyboard focus on everything interactive. */
+  a:focus-visible, button:focus-visible, .card.expandable:focus-visible,
+  .icon-btn:focus-visible, .copy:focus-visible{
+    outline:2px solid var(--accent);outline-offset:3px;
+  }
+
   .eyebrow{
     font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;
     text-transform:uppercase;color:var(--accent);margin-bottom:14px;
@@ -564,6 +579,7 @@
 </head>
 <body>
 
+<a class="skip" href="#features">Skip to content</a>
 <header id="top-bar">
   <div class="wrap nav">
     <a class="brand" href="#"><span class="orb"></span>Amy</a>
@@ -575,7 +591,7 @@
       <a href="#android">Android</a>
       <a href="#faq" class="hide-sm">FAQ</a>
       <button class="icon-btn" id="theme-btn" aria-label="Toggle colour theme" title="Toggle theme">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
         </svg>
       </button>
@@ -596,7 +612,7 @@
     <div class="cta">
       <a class="btn btn-primary" href="#start">
         Get started
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </a>
       <a class="btn btn-ghost" href="https://github.com/edzzztech/Amy-AI" id="repo-link-hero">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-2.91-.88-2.91-2.84 0-.56.2-1.02.52-1.38-.05-.13-.23-.65.05-1.35 0 0 .54-.17 1.77.66a4.9 4.9 0 0 1 2.61 0c1.23-.84 1.77-.66 1.77-.66.28.7.1 1.22.05 1.35.32.36.52.82.52 1.38 0 1.97-1.14 2.64-2.92 2.84.3.26.56.76.56 1.54 0 1.11-.01 2.01-.01 2.29 0 .21.15.46.55.38A7.99 7.99 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -643,7 +659,7 @@
     <div class="grid">
 
       <div class="card">
-        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></div>
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></div>
         <h3>Full-duplex voice</h3>
         <p>She listens while she speaks. Interrupt her mid-sentence and she stops — barge-in is voice-activated, with a clap or a global hotkey as backup wake signals.</p>
         <span class="more">Read more</span>
@@ -674,7 +690,7 @@
       </div>
 
       <div class="card">
-        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
         <h3>Screen awareness</h3>
         <p>A vision model reads your actual display on an interval. Ask what's on screen, what an error means, or what that dialog is asking for.</p>
         <span class="more">Read more</span>
@@ -700,7 +716,7 @@
       </div>
 
       <div class="card">
-        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7"/></svg></div>
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7"/></svg></div>
         <h3>Computer control</h3>
         <p>An agent that finds and drives real applications through UI automation — opening, clicking, typing. Risky steps wait for your approval first.</p>
         <span class="more">Read more</span>
@@ -724,7 +740,7 @@
       </div>
 
       <div class="card">
-        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
         <h3>Real CAD, not meshes</h3>
         <p>CadQuery builds exact B-rep solids — hinged assemblies, tolerances, STEP export — then a visual check confirms the part came out as described.</p>
         <span class="more">Read more</span>
@@ -749,7 +765,7 @@
       </div>
 
       <div class="card">
-        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/></svg></div>
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/></svg></div>
         <h3>Cameras &amp; gestures</h3>
         <p>Run several named cameras — desk, bench, printer — and switch by voice. Point one at something and ask what it is. Gestures map to actions: open palm pauses media, fist mutes.</p>
         <span class="more">Read more</span>
@@ -783,7 +799,7 @@
       </div>
 
       <div class="card">
-        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3.2"/></svg></div>
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3.2"/></svg></div>
         <h3>Proactive engine</h3>
         <p>She thinks on a timer, watches folders for new files, and raises things worth raising — rate-limited, and silent during quiet hours.</p>
         <span class="more">Read more</span>
@@ -807,7 +823,7 @@
       </div>
 
       <div class="card">
-        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h11l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 8h6M8 12h8M8 16h5"/></svg></div>
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5a2 2 0 0 1 2-2h11l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 8h6M8 12h8M8 16h5"/></svg></div>
         <h3>Memory that persists</h3>
         <p>Transcripts, a knowledge base and learned skills live on disk in <code>amy_data</code>, watched for changes and recalled in later conversations.</p>
         <span class="more">Read more</span>
@@ -835,7 +851,7 @@
 
 
       <div class="card">
-        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></div>
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></div>
         <h3>Routines</h3>
         <p>Things that run on a schedule, in her own words. &ldquo;Every day at 8, brief me on the weather&rdquo; &mdash; and a routine can do anything you could say out loud.</p>
         <span class="more">Read more</span>
@@ -861,7 +877,7 @@
       </div>
 
       <div class="card">
-        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l2 2 4-4"/><path d="M4 19V5a2 2 0 0 1 2-2h11l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg></div>
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l2 2 4-4"/><path d="M4 19V5a2 2 0 0 1 2-2h11l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg></div>
         <h3>An audit trail</h3>
         <p>Every plan approved or refused, every message sent, every app driven — written to disk as it happens. Software that can click buttons for you should be able to show its receipts.</p>
         <span class="more">Read more</span>
@@ -884,8 +900,31 @@
         </div>
       </div>
 
+
       <div class="card">
-        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div>
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
+        <h3>Also on Android</h3>
+        <p>A second build that runs on the phone itself, so it still works with your PC off. Always listening, drives your apps, and a floating orb over everything else.</p>
+        <span class="more">Read more</span>
+        <div class="detail" hidden>
+<p>Not a remote control and not a port &mdash; a sibling that runs the model, the speech and the memory on the handset.</p>
+<h4>What it does</h4>
+<ul>
+  <li>Listens for &ldquo;Amy&rdquo; continuously, with a conversation window so follow-ups don&rsquo;t need her name.</li>
+  <li>Runs a small local model through MediaPipe, with GPU acceleration.</li>
+  <li>Opens apps, taps by name and types, through Android&rsquo;s accessibility service. Root is optional and only adds to it.</li>
+  <li>Floats an orb over other apps &mdash; drag it, tap to open, long-press to sleep.</li>
+  <li>Camera capture, file attachments and conversation history.</li>
+</ul>
+<h4>What does not carry over</h4>
+<p>CAD, reading your PC&rsquo;s screen and Windows automation cannot cross to a phone. A handset also runs a 1&ndash;3B model against your desktop&rsquo;s much larger ones, so expect it to be faster but less capable. That is physics, not effort.</p>
+<h4>Installing it</h4>
+<p>There is no Play Store build. Open the <code>android/</code> folder in Android Studio, run it on your phone, then push a MediaPipe <code>.task</code> model across. Full steps are in the <a href="#android" style="color:var(--accent)">Android section</a>.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div>
         <h3>Model routing</h3>
         <p>Separate local models for fast replies, reasoning, code, CAD and vision. Auto-select picks the right one per request instead of one model for everything.</p>
         <span class="more">Read more</span>
@@ -913,7 +952,7 @@
       </div>
 
       <div class="card">
-        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12V7a7 7 0 0 1 14 0v5"/><rect x="3" y="12" width="18" height="9" rx="2"/></svg></div>
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12V7a7 7 0 0 1 14 0v5"/><rect x="3" y="12" width="18" height="9" rx="2"/></svg></div>
         <h3>Everything stays home</h3>
         <p>Inference runs against localhost. Mail, messaging and smart-home integrations are opt-in, and credentials live only in your own config file.</p>
         <span class="more">Read more</span>
@@ -1315,6 +1354,9 @@ ollama pull nomic-embed-text  <span class="cm"># memory search</span></pre></div
     <a href="https://github.com/edzzztech/Amy-AI">GitHub</a>
     <a href="#features">Features</a>
     <a href="#start">Setup</a>
+    <a href="privacy.html">Privacy</a>
+    <a href="terms.html">Terms</a>
+    <a href="cookies.html">Cookies</a>
   </div>
 </footer>
 

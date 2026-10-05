@@ -35,8 +35,17 @@ class Stt(private val context: Context) {
     /** Ask the recogniser to stay on-device. Honoured where the phone supports it. */
     var preferOffline: Boolean = true
 
-    /** Silence the device's own listening cues. Off makes every restart audible. */
-    var suppressCues: Boolean = true
+    /**
+     * Silence the device's listening cues while she is listening.
+     *
+     * Off by default, deliberately. Muting the system and notification streams
+     * is a blunt instrument: it silences everything else on the phone too, so
+     * an always-on assistant would effectively keep your handset on silent all
+     * day and you would miss messages. Reusing one recogniser already removes
+     * the repeated chime, which was the real problem; this is only here for
+     * devices that still cue on every pass, and it is yours to switch on.
+     */
+    var suppressCues: Boolean = false
 
     private var recognizer: SpeechRecognizer? = null
     private var listening = false

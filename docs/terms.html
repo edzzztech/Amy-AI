@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms of Use — Amy AI</title>
+<meta name="description" content="Terms for using the Amy AI website and software, including the non-commercial licence, the absence of any warranty, and what the software is allowed to do on your machine.">
+<link rel="canonical" href="https://edzzztech.github.io/Amy-AI/terms.html">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="any">
+<meta name="robots" content="index, follow">
+<style>
+  :root{
+    --bg:#07080c; --surface:#0e1017; --surface-2:#13161f;
+    --line:rgba(255,255,255,.09); --text:#e8eaf2; --muted:#9aa0b4;
+    --accent:#5eead4; --accent-2:#a78bfa; --warn:#f6b26b;
+    --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: light){
+    :root{--bg:#fbfbfa;--surface:#fff;--surface-2:#f4f4f2;--line:rgba(0,0,0,.12);
+          --text:#15171c;--muted:#4d5260;--accent:#0b7a70;--accent-2:#6d28d9;--warn:#9a5b00}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+       line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:68ch;margin:0 auto;padding:0 20px}
+  header{border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;gap:12px;height:62px}
+  .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit;
+         font-weight:650;font-size:1.02rem}
+  .orb{width:22px;height:22px;border-radius:50%;flex:none;
+       background:radial-gradient(circle at 32% 30%,var(--accent),var(--accent-2) 72%)}
+  .nav a.back{margin-left:auto;color:var(--muted);text-decoration:none;font-size:.9rem;
+              padding:8px;border-radius:8px}
+  .nav a.back:hover,.nav a.back:focus-visible{color:var(--text);background:var(--surface-2)}
+  main{padding:48px 0 72px}
+  h1{font-size:clamp(1.8rem,5vw,2.4rem);letter-spacing:-.02em;margin:0 0 8px}
+  .updated{color:var(--muted);font-size:.9rem;margin:0 0 36px}
+  h2{font-size:1.18rem;margin:40px 0 12px;letter-spacing:-.01em}
+  p,li{font-size:1rem}
+  ul{padding-left:20px}
+  li{margin-bottom:8px}
+  a{color:var(--accent)}
+  a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  .callout{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);
+           border-radius:10px;padding:16px 18px;margin:24px 0}
+  .callout.warn{border-left-color:var(--warn)}
+  .callout p{margin:0}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface-2);
+       padding:2px 6px;border-radius:5px}
+  footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-size:.88rem}
+  footer a{color:var(--muted)}
+  footer a:hover{color:var(--text)}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="./"><span class="orb" aria-hidden="true"></span>Amy AI</a>
+    <a class="back" href="./">Back to the site</a>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <h1>Terms of Use</h1>
+    <p class="updated">Last updated 5 October 2026</p>
+
+    <div class="callout">
+      <p><strong>In short:</strong> this is a free, personal open-source project. Nothing is sold. You may use and modify it for anything non-commercial, there is no warranty of any kind, and the software can control your computer — so you are responsible for what you let it do.</p>
+    </div>
+
+    <h2>What this is</h2>
+    <p>Amy is a hobby project published as source code by an individual, <strong>edzzztech</strong>, on GitHub. It is not a company, not a product, and not a service. There is no subscription, no purchase and no support obligation. It is under active development and parts of it do not work properly.</p>
+
+    <h2>Licence</h2>
+    <p>The software is licensed under the <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">PolyForm Noncommercial License 1.0.0</a>. In plain terms: use it, change it, share it and build on it for any non-commercial purpose, but you may not sell it or use it commercially without separate permission, and you must pass on the licence and the copyright notice with any copy. The full text is in the <a href="https://github.com/edzzztech/Amy-AI/blob/main/LICENSE">LICENSE file</a>, and it governs if anything here conflicts with it.</p>
+
+    <h2>No warranty</h2>
+    <p>The software is provided <strong>as is</strong>, without warranty or condition of any kind, express or implied. To the fullest extent the law allows, the author is not liable for any damage, loss of data, loss of profit or other harm arising from using it or being unable to use it.</p>
+    <p>Nothing in these terms limits liability for death or personal injury caused by negligence, for fraud, or for anything else that cannot lawfully be excluded. If you are a consumer, your statutory rights are unaffected.</p>
+
+    <h2>What the software can do to your machine</h2>
+    <div class="callout warn">
+      <p>Amy can open and control applications, move your mouse, type, send email and messages, read what is on your screen, use your camera and microphone, and write files. Shell command execution is available but switched off by default.</p>
+    </div>
+    <p>You decide what to enable. You are responsible for configuring it sensibly, for anything it does on your behalf, and for keeping the approval prompts on if you want them. Do not run it on a machine where a mistake would be costly, and do not give it credentials you cannot afford to have misused.</p>
+
+    <h2>AI output</h2>
+    <p>Replies are generated by a language model running on your device. They may be wrong, misleading or nonsensical, and they are not professional advice of any kind — medical, legal, financial or otherwise. Check anything that matters before acting on it.</p>
+
+    <h2>Third-party software and models</h2>
+    <p>Amy depends on other people's work — Ollama, language models such as Gemma, Python and Android libraries, and any service you connect it to. Each has its own licence and terms, and you are responsible for complying with them. Gemma models, for example, are subject to Google's Gemma Terms of Use.</p>
+
+    <h2>Your responsibilities</h2>
+    <ul>
+      <li>Use the software lawfully, and only on devices and accounts you are entitled to control.</li>
+      <li>Do not use it to harm, harass, deceive or infringe anyone's rights.</li>
+      <li>Keep your own credentials and data secure; they stay on your machine and we cannot recover them.</li>
+    </ul>
+
+    <h2>Changes and availability</h2>
+    <p>The project may change, break or be withdrawn at any time, without notice. There is no commitment to maintain it, to keep the site online, or to preserve compatibility.</p>
+
+    <h2>Governing law</h2>
+    <p>These terms are governed by the law of England and Wales, and the courts of England and Wales have jurisdiction. If you are a consumer elsewhere, this does not deprive you of protections you have under your local law.</p>
+
+    <h2>Contact</h2>
+    <p>Raise an issue on the <a href="https://github.com/edzzztech/Amy-AI">project repository</a>.</p>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a href="./">Home</a> &middot;
+    <a href="privacy.html">Privacy</a> &middot;
+    <a href="cookies.html">Cookies &amp; storage</a> &middot;
+    <a href="https://github.com/edzzztech/Amy-AI">Source</a>
+  </div>
+</footer>
+</body>
+</html>
