@@ -28,6 +28,22 @@ object AmyState {
     private val _problem = MutableStateFlow<String?>(null)
     val problem: StateFlow<String?> = _problem.asStateFlow()
 
+    /** The conversation on screen. */
+    private val _turns = MutableStateFlow<List<Turn>>(emptyList())
+    val turns: StateFlow<List<Turn>> = _turns.asStateFlow()
+
+    /** The drawer's list of past conversations. */
+    private val _history = MutableStateFlow<List<Conversation>>(emptyList())
+    val history: StateFlow<List<Conversation>> = _history.asStateFlow()
+
+    fun setTurns(list: List<Turn>) {
+        _turns.value = list
+    }
+
+    fun setHistory(list: List<Conversation>) {
+        _history.value = list
+    }
+
     fun setState(next: Listening) {
         _state.value = next
     }
