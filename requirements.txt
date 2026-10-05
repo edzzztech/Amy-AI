@@ -1,0 +1,38 @@
+# Amy - required
+PyQt5
+PyQtWebEngine
+requests
+psutil
+pillow
+pyautogui
+
+# Voice (full duplex, instant interruption)
+SpeechRecognition
+sounddevice
+miniaudio
+webrtcvad-wheels
+edge-tts
+
+# Seeing the screen and controlling apps
+mss
+uiautomation
+pywin32
+pydirectinput
+
+# CAD (exact solids, hinged assemblies, STEP export)
+cadquery
+
+# Nice to have
+numpy
+opencv-python
+mediapipe
+pyperclip
+pystray
+pypdf
+python-docx
+playwright
+reportlab
+
+# Optional upgrades
+faster-whisper      # offline, accurate speech recognition (used automatically when installed)
+# torch torchaudio  # only if you drop a trained clap model at amy_data/clap_model.pth
