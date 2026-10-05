@@ -19,6 +19,9 @@
         "model": "llama3.2",
         "vision_model": "llava",
         "embed_model": "nomic-embed-text",
+        "memory_mode": "lean",
+        "max_ctx": 32768,
+        "kv_cache": "q8_0",
         "models": {
             "fast": "",
             "chat": "",

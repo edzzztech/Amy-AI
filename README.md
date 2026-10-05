@@ -152,4 +152,16 @@ Issues and pull requests are welcome. If you're reporting a bug, `amy_data/amy_d
 
 ## License
 
-No license has been chosen yet. Until one is added, all rights are reserved; open an issue if you'd like to use the code.
+**[PolyForm Noncommercial 1.0.0](LICENSE)** — Copyright © 2026 edzzztech
+
+In plain terms:
+
+- ✅ **Use it, study it, change it, build on it** — for any noncommercial purpose
+- ✅ **Fork and redistribute it**, modified or not
+- ✅ **Personal projects, hobby use, research, education, charities and public institutions** are all fine
+- ❌ **You may not sell it**, or use it commercially, without a separate licence from me
+- ⚠️ **You must keep the credit.** Anyone you pass the code to must also receive this licence and the `Required Notice:` line at the top of [LICENSE](LICENSE)
+
+Stripping the attribution or reuploading this as your own ends your licence immediately, which makes further copying straightforward copyright infringement.
+
+Want to use Amy commercially? Open an issue and ask — I'm happy to discuss a separate licence.

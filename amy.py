@@ -1,3 +1,13 @@
+"""Amy — a local-first voice assistant for Windows.
+
+Required Notice: Copyright (c) 2026 edzzztech — https://github.com/edzzztech/Amy-AI
+
+Licensed under the PolyForm Noncommercial License 1.0.0. You may use, change
+and redistribute this for any noncommercial purpose, but you must pass on the
+licence and the notice above with any copy. Commercial use needs a separate
+licence. See the LICENSE file, or https://polyformproject.org/licenses/noncommercial/1.0.0
+"""
+
 import os
 import sys
 import json
@@ -3856,14 +3866,14 @@ HTML_UI = r"""
         /* Widgets remain fully interactive on top of the desk feed. */
         .reactor-container.convo-mode .core-center { border-color: #1ed760; color: #1ed760; box-shadow: 0 0 45px rgba(30,215,96,0.6); }
         .workspace.over-camera { z-index: 50; }
+        /* Over the feed, panels only get more transparent — same card otherwise,
+           so the camera view doesn't reintroduce the old teal-tinted styling. */
         .workspace.over-camera .widget {
-            background: linear-gradient(160deg, rgba(9,15,26,0.74) 0%, rgba(5,9,16,0.70) 100%);
-            border-color: rgba(94,234,212,0.45);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.7), 0 0 22px rgba(94,234,212,0.14);
-            backdrop-filter: blur(14px) saturate(1.2);
+            background: rgba(14, 16, 23, 0.78);
+            box-shadow: 0 24px 60px -12px rgba(0,0,0,0.8);
         }
         .workspace.over-camera .widget:hover {
-            background: linear-gradient(160deg, rgba(9,15,26,0.92) 0%, rgba(5,9,16,0.9) 100%);
+            background: rgba(14, 16, 23, 0.94);
         }
         /* Keep the dock and title bar above the feed too. */
         body.camera-mode .bottom-control-bar { z-index: 1000; }
@@ -4145,8 +4155,8 @@ HTML_UI = r"""
             align-items: center; gap: 6px;
             /* The sphere is the mark; the name sits under it as a caption. */
             transform: translateY(132px); }
-        /* The sphere is the logo — no wordmark under it. */
-        .orb-name { display: none; }
+        /* The blob is the logo — no wordmark, no state caption under it. */
+        .orb-name, .orb-state { display: none; }
         .orb-state { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
             color: var(--text-dim); min-height: 14px; max-width: 200px; text-align: center;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -4696,6 +4706,7 @@ HTML_UI = r"""
 
   function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a.toFixed(3) + ')'; }
 
+
   function drawOrb(cv, t, st) {
     const [W, H] = fitCanvas(cv);
     const ctx = cv.getContext('2d');
@@ -4715,22 +4726,26 @@ HTML_UI = r"""
     // the offsets below put the highlight in the same place on the sphere.
     const body = muted ? MUTED_DEEP : ACCENT_2;
     const deep = muted ? MUTED_SHADE : ACCENT_3;
-    const r = R * (0.84 + 0.045 * lvl + 0.06 * flash);
+    // A circle that breathes with the mic, rather than deforming.
+    const r = R * (0.84 + 0.07 * lvl + 0.08 * flash);
 
-    // Halo — the site's 3px ring, grown into something that answers the mic.
-    // Clamped inside the canvas: any further and the corners square it off.
-    const haloR = Math.min(r * 1.85, S * 0.495);
-    const halo = ctx.createRadialGradient(cx, cy, r * 0.94, cx, cy, haloR);
+    // Halo. Clamped inside the canvas or the corners square it off.
+    const haloR = Math.min(r * 1.8, S * 0.495);
+    const halo = ctx.createRadialGradient(cx, cy, r * 0.9, cx, cy, haloR);
     halo.addColorStop(0, rgba(col, muted ? 0.07 : 0.18 + 0.30 * lvl + 0.26 * flash));
     halo.addColorStop(0.45, rgba(body, muted ? 0.04 : 0.10 + 0.18 * lvl));
     halo.addColorStop(1, rgba(body, 0));
     ctx.fillStyle = halo;
     ctx.beginPath(); ctx.arc(cx, cy, haloR, 0, TAU); ctx.fill();
 
-    // Sphere: highlight at 32%/30% of the box, body colour by 72%. Scaled up,
-    // the stops have to sit tighter than the CSS or it washes out to pastel.
-    // The origin drifts and the mid stop breathes, so the gradient itself
-    // animates now that the spinning ring is gone.
+    // The silhouette stays a circle — the fluid motion is all inside it.
+    // Everything below paints within this clip, so there is no rim or ring.
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.clip();
+
+    // Gradient: highlight at 32%/30%, body colour by 72%. Scaled up, the stops
+    // sit tighter than the CSS or it washes out to pastel. The origin drifts
+    // and the mid stop breathes, so the fill animates under the deformation.
     const drift = t * 0.38;
     const ox = cx + r * (-0.36 + 0.11 * Math.cos(drift));
     const oy = cy + r * (-0.40 + 0.10 * Math.sin(drift * 1.17));
@@ -4741,37 +4756,35 @@ HTML_UI = r"""
     sphere.addColorStop(mid, rgba(body, 1));
     sphere.addColorStop(1, rgba(deep, 1));
     ctx.fillStyle = sphere;
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+    ctx.fillRect(cx - r * 1.6, cy - r * 1.6, r * 3.2, r * 3.2);
 
-    // A second teal bloom drifting the other way, so the surface churns
-    // instead of just sliding.
+    // Two currents moving against each other, so the inside churns like
+    // liquid rather than sliding as one piece.
     const bx = cx + r * 0.34 * Math.cos(-drift * 0.72 + 2.1);
     const by = cy + r * 0.34 * Math.sin(-drift * 0.72 + 2.1);
-    const bloom = ctx.createRadialGradient(bx, by, 0, bx, by, r * 0.9);
-    bloom.addColorStop(0, rgba(col, muted ? 0.05 : 0.20 + 0.16 * lvl));
+    const bloom = ctx.createRadialGradient(bx, by, 0, bx, by, r * (0.9 + 0.3 * lvl));
+    bloom.addColorStop(0, rgba(col, muted ? 0.05 : 0.20 + 0.22 * lvl));
     bloom.addColorStop(1, rgba(col, 0));
     ctx.fillStyle = bloom;
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+    ctx.fillRect(cx - r * 1.6, cy - r * 1.6, r * 3.2, r * 3.2);
 
-    // A slow sheen drifting across the surface so it reads as glass, not a dot.
+    const vx = cx + r * 0.40 * Math.cos(drift * 1.31 + 4.2);
+    const vy = cy + r * 0.40 * Math.sin(drift * 1.31 + 4.2);
+    const eddy = ctx.createRadialGradient(vx, vy, 0, vx, vy, r * (0.7 + 0.35 * lvl));
+    eddy.addColorStop(0, rgba(body, muted ? 0.04 : 0.18 + 0.20 * lvl));
+    eddy.addColorStop(1, rgba(body, 0));
+    ctx.fillStyle = eddy;
+    ctx.fillRect(cx - r * 1.6, cy - r * 1.6, r * 3.2, r * 3.2);
+
+    // A slow sheen so it reads as a liquid surface rather than a flat shape.
     const sx = cx + r * 0.42 * Math.cos(angle * 0.6), sy = cy + r * 0.42 * Math.sin(angle * 0.6);
     const sheen = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 0.85);
-    sheen.addColorStop(0, 'rgba(255,255,255,' + (muted ? 0.02 : 0.05 + 0.07 * lvl).toFixed(3) + ')');
+    sheen.addColorStop(0, 'rgba(255,255,255,' + (muted ? 0.02 : 0.05 + 0.08 * lvl).toFixed(3) + ')');
     sheen.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = sheen;
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+    ctx.fillRect(cx - r * 1.6, cy - r * 1.6, r * 3.2, r * 3.2);
 
-    // Rim light, then a breathing ring that only shows when she's hearing you.
-    ctx.lineWidth = Math.max(1, S * 0.004);
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
-
-    if (!muted && (lvl > 0.01 || flash > 0.01)) {
-      const pulse = r * (1.16 + 0.12 * lvl + 0.10 * flash);
-      ctx.lineWidth = Math.max(1, S * 0.0035);
-      ctx.strokeStyle = rgba(col, Math.min(0.55, 0.14 + 0.45 * lvl + 0.35 * flash));
-      ctx.beginPath(); ctx.arc(cx, cy, pulse, 0, TAU); ctx.stroke();
-    }
+    ctx.restore();
   }
 
   // Slow, low-contrast colour drift. Drawn at a tiny resolution and scaled up
@@ -10370,9 +10383,17 @@ class AmyApp:
         self.camera_active = want
         if want:
             # Restart the worker if it was never started OR died from an error.
+            # Reset the announce latch on every open. It was only cleared on
+            # close, so a worker that restarted without one left it set, which
+            # skipped cameraReady() — and with cameraDesired still false the UI
+            # silently dropped every frame.
+            self._camera_announced = False
             if not self._camera_thread_alive():
                 self._camera_thread = threading.Thread(target=self._camera_worker, daemon=True)
                 self._camera_thread.start()
+            # Open the stage now rather than waiting on the first frame, so the
+            # view is full-screen from the moment it is asked for.
+            self.run_js("setCameraState(true)")
             # Fill the picker so the view opens knowing which device it is on.
             self._push_camera_list()
             # The UI only opens once a real frame arrives, so you never get a

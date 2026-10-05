@@ -17,6 +17,11 @@
 <meta property="og:url" content="https://edzzztech.github.io/Amy-AI/">
 <meta property="og:title" content="Amy AI — Local Voice Assistant for Windows">
 <meta property="og:description" content="A JARVIS-style offline AI assistant powered by Ollama. Sees your screen, controls your apps, models CAD parts — and runs entirely on your own machine.">
+<meta property="og:image" content="https://edzzztech.github.io/Amy-AI/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Amy AI — local voice assistant for Windows, powered by Ollama">
+<meta name="twitter:image" content="https://edzzztech.github.io/Amy-AI/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Amy AI — Local Voice Assistant for Windows">
 <meta name="twitter:description" content="A JARVIS-style offline AI assistant powered by Ollama. Runs entirely on your own machine — no API keys, no cloud.">
@@ -240,6 +245,68 @@
   .card h3{font-size:1.04rem;font-weight:620;margin-bottom:8px}
   .card p{color:var(--muted);font-size:.92rem}
 
+  /* ---------- expandable feature cards ---------- */
+  .card.expandable{cursor:pointer;position:relative}
+  .card.expandable:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  .card .detail[hidden]{display:none}
+  .more{
+    display:inline-flex;align-items:center;gap:5px;margin-top:14px;
+    font-size:.82rem;font-weight:580;color:var(--accent);
+  }
+  .more::after{content:"→";transition:transform .18s ease}
+  .card.expandable:hover .more::after{transform:translateX(3px)}
+
+  .sheet-backdrop{
+    position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:20px;
+    background:rgba(4,5,8,.72);backdrop-filter:blur(8px);
+  }
+  .sheet-backdrop[hidden]{display:none}
+  .sheet{
+    position:relative;width:min(680px,100%);max-height:84vh;overflow:hidden;
+    display:flex;flex-direction:column;
+    background:var(--surface);border:1px solid var(--line-strong);border-radius:16px;
+    box-shadow:0 30px 80px -20px rgba(0,0,0,.8);
+  }
+  .sheet::before{
+    content:"";position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(100deg,var(--accent),var(--accent-2));
+  }
+  .sheet-head{
+    display:flex;align-items:center;gap:12px;padding:22px 24px 14px;
+    border-bottom:1px solid var(--line);
+  }
+  .sheet-head h3{font-size:1.2rem;font-weight:650}
+  .sheet-close{
+    margin-left:auto;flex:none;width:32px;height:32px;border-radius:9px;
+    border:1px solid var(--line);background:transparent;color:var(--muted);
+    cursor:pointer;font-size:1rem;line-height:1;transition:color .18s,background .18s;
+  }
+  .sheet-close:hover{background:var(--surface-2);color:var(--text)}
+  .sheet-body{padding:20px 24px 26px;overflow-y:auto}
+  .sheet-body p{color:var(--muted);font-size:.94rem;margin-bottom:14px}
+  .sheet-body h4{
+    font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);margin:22px 0 10px;font-weight:500;
+  }
+  .sheet-body h4:first-child{margin-top:0}
+  .sheet-body ul{margin:0 0 14px;padding-left:18px;color:var(--muted);font-size:.94rem}
+  .sheet-body li{margin-bottom:7px}
+  .sheet-body em{color:var(--text);font-style:normal}
+  .sheet-body code{color:var(--accent);background:var(--surface-2);padding:2px 6px;border-radius:5px}
+  .sheet-body pre{margin:0 0 14px}
+  .sheet-body pre code{background:none;padding:0;color:var(--text)}
+  .sheet-body table{
+    width:100%;border-collapse:collapse;font-size:.9rem;margin-bottom:14px;
+    border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  }
+  .sheet-body td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  .sheet-body tr:last-child td{border-bottom:none}
+  .sheet-body td:first-child{width:38%;white-space:nowrap}
+  .sheet-body td:last-child{color:var(--muted)}
+  @media (max-width:560px){
+    .sheet-body td:first-child{width:auto;white-space:normal}
+  }
+
   /* ---------- pipeline ---------- */
   .pipe{
     border:1px solid var(--line);border-radius:var(--radius);
@@ -333,6 +400,7 @@
       <a href="#how" class="hide-sm">How it works</a>
       <a href="#start">Setup</a>
       <a href="#config" class="hide-sm">Config</a>
+      <a href="#faq" class="hide-sm">FAQ</a>
       <button class="icon-btn" id="theme-btn" aria-label="Toggle colour theme" title="Toggle theme">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
@@ -393,7 +461,7 @@
   <div class="wrap">
     <div class="sec-head">
       <div class="eyebrow">Capabilities</div>
-      <h2>Not a chatbot in a window</h2>
+      <h2>What a local AI assistant can actually do</h2>
       <p>
         Amy has hands, eyes and ears on the machine she runs on. Every subsystem below is
         part of the same process — one wake word reaches all of them.
@@ -405,54 +473,241 @@
         <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></div>
         <h3>Full-duplex voice</h3>
         <p>She listens while she speaks. Interrupt her mid-sentence and she stops — barge-in is voice-activated, with a clap as a backup wake signal.</p>
+        <span class="more">Read more</span>
+        <div class="detail" hidden>
+<p>Amy listens and speaks at the same time. There is no press-to-talk and no waiting for her to finish &mdash; start speaking and she stops mid-sentence.</p>
+<h4>How to use it</h4>
+<ul>
+  <li>Say the wake word, then your request: <em>&ldquo;Amy, what&rsquo;s the weather?&rdquo;</em></li>
+  <li>Interrupt her at any point by simply talking over her.</li>
+  <li>Clap twice to wake her if your voice won&rsquo;t carry.</li>
+  <li>Pause mid-thought and she keeps listening rather than cutting you off.</li>
+</ul>
+<h4>Settings</h4>
+<table>
+  <tr><td><code>wake_word</code></td><td>What she answers to. Pick something that won&rsquo;t appear in normal conversation.</td></tr>
+  <tr><td><code>barge_in</code></td><td><code>voice</code> stops her the moment you speak; <code>off</code> lets her finish.</td></tr>
+  <tr><td><code>barge_sensitivity</code></td><td>Raise it if background noise keeps cutting her off.</td></tr>
+  <tr><td><code>clap_wake</code></td><td>Clap detection as a backup wake signal.</td></tr>
+  <tr><td><code>whisper_model</code></td><td><code>small.en</code> by default. Larger is more accurate and slower.</td></tr>
+  <tr><td><code>continuation_listening</code></td><td>Keeps the mic open if you paused rather than finished.</td></tr>
+</table>
+<h4>Worth knowing</h4>
+<p>Install <code>faster-whisper</code> and she uses it automatically for offline recognition &mdash; noticeably more accurate than the default. Voice activity detection gates the expensive stages, so the transcriber only runs on real speech.</p>
+</div>
       </div>
 
       <div class="card">
         <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
         <h3>Screen awareness</h3>
         <p>A vision model reads your actual display on an interval. Ask what's on screen, what an error means, or what that dialog is asking for.</p>
+        <span class="more">Read more</span>
+        <div class="detail" hidden>
+<p>A local vision model looks at your actual display, so you can ask about what you are looking at instead of describing it.</p>
+<h4>How to use it</h4>
+<ul>
+  <li><em>&ldquo;Amy, what am I looking at?&rdquo;</em></li>
+  <li><em>&ldquo;What does this error mean?&rdquo;</em></li>
+  <li><em>&ldquo;What is this dialog asking me?&rdquo;</em></li>
+  <li>Double-click the desktop orb to make her look at the screen immediately.</li>
+</ul>
+<h4>Settings</h4>
+<table>
+  <tr><td><code>vision_interval</code></td><td>Seconds between automatic looks. Lower is more responsive and more expensive.</td></tr>
+  <tr><td><code>screen_awareness_on_start</code></td><td>Off by default &mdash; she only looks when asked.</td></tr>
+  <tr><td><code>lens_tokens</code></td><td>Reply length for vision answers. Short answers are much faster.</td></tr>
+  <tr><td><code>warm_vision</code></td><td>Preloads the vision model at startup so the first look is not slow.</td></tr>
+</table>
+<h4>Worth knowing</h4>
+<p>This needs a vision-capable model pulled in Ollama &mdash; <code>llava</code> by default. Screen captures are processed locally and never leave the machine.</p>
+</div>
       </div>
 
       <div class="card">
         <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7"/></svg></div>
         <h3>Computer control</h3>
         <p>An agent that finds and drives real applications through UI automation — opening, clicking, typing. Risky steps wait for your approval first.</p>
+        <span class="more">Read more</span>
+        <div class="detail" hidden>
+<p>Amy builds an index of the applications on your machine, then finds and drives them through Windows UI automation &mdash; opening, clicking, typing, navigating.</p>
+<h4>How to use it</h4>
+<ul>
+  <li><em>&ldquo;Open Chrome and search for CadQuery docs.&rdquo;</em></li>
+  <li><em>&ldquo;When I say my editor, I mean VS Code&rdquo;</em> &mdash; teaches an alias she remembers.</li>
+  <li><em>&ldquo;How many apps can you see?&rdquo;</em> &mdash; rebuilds the app index.</li>
+</ul>
+<h4>Settings</h4>
+<table>
+  <tr><td><code>automation_approval</code></td><td><code>risky</code> gates destructive steps only; <code>all</code> asks before everything.</td></tr>
+  <tr><td><code>approval_timeout</code></td><td>Seconds to wait for your answer. Timing out declines.</td></tr>
+  <tr><td><code>allow_shell_commands</code></td><td>Off by default, deliberately. Only enable if you want her running shell commands.</td></tr>
+</table>
+<h4>Worth knowing</h4>
+<p>Approval prompts appear in the window and are spoken. Leaving <code>automation_approval</code> at <code>risky</code> is the sensible default &mdash; she acts freely on safe steps and stops for anything that deletes, sends or overwrites.</p>
+</div>
       </div>
 
       <div class="card">
         <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
         <h3>Real CAD, not meshes</h3>
         <p>CadQuery builds exact B-rep solids — hinged assemblies, tolerances, STEP export — then a visual check confirms the part came out as described.</p>
+        <span class="more">Read more</span>
+        <div class="detail" hidden>
+<p>Most AI CAD produces meshes you cannot edit. Amy drives CadQuery to build exact B-rep solids &mdash; real geometry with real constraints, exportable to STEP for any CAD package.</p>
+<h4>How to use it</h4>
+<ul>
+  <li><em>&ldquo;Model me a hinged enclosure, 80 by 50 by 30 millimetres.&rdquo;</em></li>
+  <li><em>&ldquo;Make the wall thickness 3 mm and add mounting tabs.&rdquo;</em> &mdash; refines the current part.</li>
+  <li>Edit the generated CadQuery code directly in the CAD panel and re-run it.</li>
+  <li>Export to STEP or STL from the same panel.</li>
+</ul>
+<h4>Settings</h4>
+<table>
+  <tr><td><code>cad.max_attempts</code></td><td>How many times she retries when the geometry fails to build.</td></tr>
+  <tr><td><code>cad.visual_check</code></td><td>Renders the result and checks it against your description before showing it.</td></tr>
+  <tr><td><code>cad.slicer_path</code></td><td>Point this at your slicer to send parts straight to print.</td></tr>
+</table>
+<h4>Worth knowing</h4>
+<p>CadQuery is about 450&nbsp;MB and is imported lazily &mdash; it costs nothing until the first CAD request. Parts land in <code>amy_data/cad/</code>.</p>
+</div>
       </div>
 
       <div class="card">
         <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/></svg></div>
         <h3>Cameras &amp; gestures</h3>
         <p>Run several named cameras — desk, bench, printer — and switch by voice. Point one at something and ask what it is. Gestures map to actions: open palm pauses media, fist mutes.</p>
+        <span class="more">Read more</span>
+        <div class="detail" hidden>
+<p>Run as many cameras as you have, give each one a name, and switch between them by voice. Point one at something and ask what it is.</p>
+<h4>Setting cameras up</h4>
+<ul>
+  <li><em>&ldquo;Amy, scan for cameras&rdquo;</em> &mdash; probes your devices and adds any new ones.</li>
+  <li><em>&ldquo;What cameras do I have?&rdquo;</em></li>
+  <li><em>&ldquo;Rename the desk camera to bench&rdquo;</em></li>
+  <li><em>&ldquo;Switch to the bench camera&rdquo;</em></li>
+  <li><em>&ldquo;Add a camera called printer on device 2&rdquo;</em></li>
+</ul>
+<p>Or use the dropdown in the camera view to switch, and the pencil to rename.</p>
+<h4>Using the feed</h4>
+<ul>
+  <li><em>&ldquo;What is this?&rdquo;</em> &mdash; identify an object held up to the lens.</li>
+  <li>Read text, translate, explain or solve what is in frame, from the camera bar.</li>
+</ul>
+<h4>Gestures</h4>
+<table>
+  <tr><td>Open palm</td><td>Pause media</td></tr>
+  <tr><td>Fist</td><td>Mute</td></tr>
+  <tr><td>Point up</td><td>Volume up</td></tr>
+  <tr><td>Peace</td><td>Next track</td></tr>
+  <tr><td>Thumbs up</td><td>Screenshot</td></tr>
+  <tr><td>Shaka</td><td>Identify object</td></tr>
+</table>
+<p>Gestures need the camera running, and are remapped under <code>gestures</code> in the config.</p>
+</div>
       </div>
 
       <div class="card">
         <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3.2"/></svg></div>
         <h3>Proactive engine</h3>
         <p>She thinks on a timer, watches folders for new files, and raises things worth raising — rate-limited, and silent during quiet hours.</p>
+        <span class="more">Read more</span>
+        <div class="detail" hidden>
+<p>Amy thinks on a timer rather than only when spoken to. She watches folders, notices things worth raising, and tells you &mdash; within limits you set.</p>
+<h4>How to use it</h4>
+<ul>
+  <li>Suggestions appear as cards you can accept or dismiss.</li>
+  <li>Drop a file into a watched folder and she will offer to do something sensible with it.</li>
+  <li><em>&ldquo;Be less chatty&rdquo;</em> adjusts how often she speaks up.</li>
+</ul>
+<h4>Settings</h4>
+<table>
+  <tr><td><code>proactive.level</code></td><td><code>off</code>, <code>low</code>, <code>normal</code> or <code>high</code>.</td></tr>
+  <tr><td><code>quiet_hours</code></td><td>Start and end hour during which she stays silent. Defaults to 23&ndash;7.</td></tr>
+  <tr><td><code>max_per_hour</code></td><td>Hard ceiling on unprompted interruptions.</td></tr>
+  <tr><td><code>think_minutes</code></td><td>How often she reflects on what is going on.</td></tr>
+  <tr><td><code>watch_folders</code></td><td>Folders to notice new files in &mdash; Downloads and Videos by default.</td></tr>
+</table>
+</div>
       </div>
 
       <div class="card">
         <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h11l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 8h6M8 12h8M8 16h5"/></svg></div>
         <h3>Memory that persists</h3>
         <p>Transcripts, a knowledge base and learned skills live on disk in <code>amy_data</code>, watched for changes and recalled in later conversations.</p>
+        <span class="more">Read more</span>
+        <div class="detail" hidden>
+<p>Conversations, facts and learned skills survive restarts. Everything lives as plain files in <code>amy_data/</code>, so you can read and edit them yourself.</p>
+<h4>How to use it</h4>
+<ul>
+  <li><em>&ldquo;Remember that my printer bed is 220 by 220.&rdquo;</em></li>
+  <li><em>&ldquo;What do you know about my workshop?&rdquo;</em></li>
+  <li><em>&ldquo;Consolidate your memory&rdquo;</em> &mdash; merges duplicates and prunes stale facts.</li>
+  <li>Drop notes or documents into the knowledge base folder and she picks them up.</li>
+</ul>
+<h4>What is on disk</h4>
+<table>
+  <tr><td><code>SOUL.md</code></td><td>Who she is and how she behaves.</td></tr>
+  <tr><td><code>MEMORY.md</code></td><td>The index of what she knows about you.</td></tr>
+  <tr><td><code>HEARTBEAT.md</code></td><td>Running notes between sessions.</td></tr>
+  <tr><td><code>skills/</code></td><td>Routines she has learned.</td></tr>
+  <tr><td><code>amy_memory.json</code></td><td>Structured facts, with a backup alongside it.</td></tr>
+</table>
+<h4>Worth knowing</h4>
+<p><code>amy_data/</code> is personal and is excluded by <code>.gitignore</code> &mdash; do not commit it, and check the debug log for credentials before sharing it.</p>
+</div>
       </div>
 
       <div class="card">
         <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div>
         <h3>Model routing</h3>
         <p>Separate local models for fast replies, reasoning, code, CAD and vision. Auto-select picks the right one per request instead of one model for everything.</p>
+        <span class="more">Read more</span>
+        <div class="detail" hidden>
+<p>One model for everything is a compromise. Amy keeps separate models for different jobs and picks per request, so quick questions stay quick and hard ones get a model that can handle them.</p>
+<h4>The roles</h4>
+<table>
+  <tr><td><code>fast</code></td><td>Short replies, acknowledgements, simple lookups.</td></tr>
+  <tr><td><code>chat</code></td><td>Ordinary conversation.</td></tr>
+  <tr><td><code>reasoning</code></td><td>Multi-step problems worth the extra time.</td></tr>
+  <tr><td><code>code</code></td><td>Writing and fixing code.</td></tr>
+  <tr><td><code>cad</code></td><td>Generating CadQuery geometry.</td></tr>
+  <tr><td><code>vision</code></td><td>Screen and camera understanding.</td></tr>
+</table>
+<h4>How to use it</h4>
+<p>Leave any role blank and it falls back to the main <code>model</code>. Fill in the ones you care about:</p>
+<pre><code>"models": {
+  "fast": "llama3.2:1b",
+  "reasoning": "qwen2.5:14b",
+  "code": "qwen2.5-coder:7b",
+  "vision": "llava"
+}</code></pre>
+<p>Set <code>auto_select</code> to false to pin everything to one model. <code>auto_start</code> launches the Ollama server on boot, and <code>stop_on_exit</code> shuts it down when she closes.</p>
+</div>
       </div>
 
       <div class="card">
         <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12V7a7 7 0 0 1 14 0v5"/><rect x="3" y="12" width="18" height="9" rx="2"/></svg></div>
         <h3>Everything stays home</h3>
         <p>Inference runs against localhost. Mail, messaging and smart-home integrations are opt-in, and credentials live only in your own config file.</p>
+        <span class="more">Read more</span>
+        <div class="detail" hidden>
+<p>The assistant is local by construction, not by promise. Inference goes to <code>localhost</code>, and anything that reaches the internet is something you configured yourself.</p>
+<h4>What never leaves</h4>
+<ul>
+  <li>Your voice, and every transcript of it.</li>
+  <li>Screen captures and camera frames.</li>
+  <li>Conversations, memory and knowledge base.</li>
+  <li>Generated code and CAD.</li>
+</ul>
+<h4>What can reach out, if you set it up</h4>
+<ul>
+  <li>Email through your own SMTP account.</li>
+  <li>SMS through your own Twilio credentials.</li>
+  <li>Spotify, Home Assistant, weather and web research.</li>
+</ul>
+<h4>Where credentials live</h4>
+<p>Only in <code>amy_config.json</code>, on your machine. The copy in the repository contains placeholders only. If you fork Amy and add real keys, keep that file out of version control.</p>
+</div>
       </div>
 
     </div>
@@ -464,7 +719,7 @@
   <div class="wrap">
     <div class="sec-head">
       <div class="eyebrow">Architecture</div>
-      <h2>One pass, wake word to voice</h2>
+      <h2>How an offline voice assistant works, wake word to reply</h2>
       <p>What happens between you saying “Amy” and hearing an answer back.</p>
     </div>
 
@@ -562,7 +817,7 @@
   <div class="wrap">
     <div class="sec-head">
       <div class="eyebrow">Setup</div>
-      <h2>Running in four steps</h2>
+      <h2>How to set up a local voice assistant on Windows</h2>
       <p>Windows, Python 3.10 or newer, and a machine with enough headroom to host a local model.</p>
     </div>
 
@@ -639,6 +894,85 @@ ollama pull nomic-embed-text  <span class="cm"># memory search</span></pre></div
   </div>
 </section>
 
+<!-- ============ FAQ ============ -->
+<section id="faq" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Questions</div>
+      <h2>Common questions about running AI locally</h2>
+      <p>What people usually want to know before installing an offline assistant.</p>
+    </div>
+    <div class="grid">
+
+      <div class="card">
+        <h3>Is Amy AI free?</h3>
+        <p>Yes. The code is free to use, change and share for any noncommercial purpose under the PolyForm Noncommercial licence. There are no API keys, no subscription and no per-request cost, because the models run on your own hardware.</p>
+      </div>
+
+      <div class="card">
+        <h3>Does it work completely offline?</h3>
+        <p>The assistant itself does. Speech recognition, the language model and the vision model all run locally, so conversation, screen reading and CAD work without a connection. Optional extras that are inherently online — weather, web research, Spotify — need one.</p>
+      </div>
+
+      <div class="card">
+        <h3>How is this different from Alexa, Siri or ChatGPT?</h3>
+        <p>Those send your voice to a company's servers and can't touch your machine. Amy runs on your PC, sees your screen, opens and drives your applications, and keeps every transcript on your own disk.</p>
+      </div>
+
+      <div class="card">
+        <h3>What hardware do I need to run a local LLM?</h3>
+        <p>Anything that can host your chosen Ollama model. A small model like <code>llama3.2</code> runs on 8&nbsp;GB of RAM; vision and reasoning models want more, and a GPU makes replies noticeably faster. Heavy parts load only when used.</p>
+      </div>
+
+      <div class="card">
+        <h3>Is any of my data sent anywhere?</h3>
+        <p>Inference goes to <code>localhost</code>. Email, messaging and smart-home integrations are opt-in and only contact services you configure yourself. Credentials stay in your own config file on your machine.</p>
+      </div>
+
+      <div class="card">
+        <h3>Can it really control my computer?</h3>
+        <p>Yes — it finds and drives real applications through Windows UI automation. Anything classed as risky pauses for your approval first, and shell command execution is off by default.</p>
+      </div>
+
+      <div class="card">
+        <h3>Does it run on Mac or Linux?</h3>
+        <p>Not yet. The automation layer uses Windows-specific APIs, so Amy currently targets Windows 10 and 11.</p>
+      </div>
+
+      <div class="card">
+        <h3>Can I use more than one camera?</h3>
+        <p>Yes. Add as many as you like, give each a name, and switch by voice — &ldquo;scan for cameras&rdquo;, then &ldquo;switch to the bench camera&rdquo;.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "Is Amy AI free?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The code is free to use, change and share for any noncommercial purpose under the PolyForm Noncommercial licence. There are no API keys, no subscription and no per-request cost, because the models run on your own hardware." } },
+    { "@type": "Question", "name": "Does Amy AI work completely offline?",
+      "acceptedAnswer": { "@type": "Answer", "text": "The assistant itself does. Speech recognition, the language model and the vision model all run locally, so conversation, screen reading and CAD work without a connection. Optional extras that are inherently online, such as weather or web research, need one." } },
+    { "@type": "Question", "name": "How is Amy AI different from Alexa, Siri or ChatGPT?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Those send your voice to a company's servers and cannot touch your machine. Amy runs on your PC, sees your screen, opens and drives your applications, and keeps every transcript on your own disk." } },
+    { "@type": "Question", "name": "What hardware do I need to run a local LLM assistant?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Anything that can host your chosen Ollama model. A small model such as llama3.2 runs on 8 GB of RAM; vision and reasoning models want more, and a GPU makes replies noticeably faster." } },
+    { "@type": "Question", "name": "Is any of my data sent anywhere?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Inference goes to localhost. Email, messaging and smart-home integrations are opt-in and only contact services you configure yourself. Credentials stay in your own config file on your machine." } },
+    { "@type": "Question", "name": "Can Amy AI control my computer?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. It finds and drives real applications through Windows UI automation. Anything classed as risky pauses for your approval first, and shell command execution is off by default." } },
+    { "@type": "Question", "name": "Does Amy AI run on Mac or Linux?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Not yet. The automation layer uses Windows-specific APIs, so Amy currently targets Windows 10 and 11." } },
+    { "@type": "Question", "name": "Can I use more than one camera?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Add as many as you like, give each a name, and switch by voice using commands such as 'scan for cameras' and 'switch to the bench camera'." } }
+  ]
+}
+</script>
+
 <!-- ============ CLOSE ============ -->
 <section style="padding-top:0">
   <div class="wrap">
@@ -666,6 +1000,65 @@ ollama pull nomic-embed-text  <span class="cm"># memory search</span></pre></div
     <a href="#start">Setup</a>
   </div>
 </footer>
+
+<div class="sheet-backdrop" id="sheetBackdrop" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-head">
+      <h3 id="sheetTitle"></h3>
+      <button class="sheet-close" id="sheetClose" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ---- expandable feature cards ----
+  // The detail lives inside each card in the markup, so it is in the page for
+  // search engines and still there if this script never runs.
+  var backdrop = document.getElementById('sheetBackdrop');
+  var sheetTitle = document.getElementById('sheetTitle');
+  var sheetBody = document.getElementById('sheetBody');
+  var lastFocused = null;
+
+  function openSheet(card){
+    var detail = card.querySelector('.detail');
+    var heading = card.querySelector('h3');
+    if (!detail || !heading) return;
+    lastFocused = card;
+    sheetTitle.innerHTML = heading.innerHTML;
+    sheetBody.innerHTML = detail.innerHTML;
+    sheetBody.scrollTop = 0;
+    backdrop.hidden = false;
+    document.body.style.overflow = 'hidden';
+    document.getElementById('sheetClose').focus();
+  }
+
+  function closeSheet(){
+    backdrop.hidden = true;
+    document.body.style.overflow = '';
+    if (lastFocused) { lastFocused.focus(); lastFocused = null; }
+  }
+
+  document.querySelectorAll('.card').forEach(function(card){
+    if (!card.querySelector('.detail')) return;
+    card.classList.add('expandable');
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-haspopup', 'dialog');
+    card.addEventListener('click', function(){ openSheet(card); });
+    card.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSheet(card); }
+    });
+  });
+
+  document.getElementById('sheetClose').addEventListener('click', closeSheet);
+  backdrop.addEventListener('click', function(e){ if (e.target === backdrop) closeSheet(); });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && !backdrop.hidden) closeSheet();
+  });
+})();
+</script>
 
 <script>
 (function(){
