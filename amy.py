@@ -969,6 +969,9 @@ DEFAULT_CONFIG = {
         "input_device": "",            # blank = default microphone
         "max_phrase_seconds": 45,      # safety ceiling, not a normal cutoff
         "continuation_listening": True,  # keep listening if you paused mid-thought
+        # System-wide key that wakes her without the wake word, e.g. "ctrl+alt+a".
+        # Empty disables it. Press it again while she is talking to stop her.
+        "push_to_talk": "",
         "max_continuations": 2,
     },
     "camera": {
@@ -2491,6 +2494,10 @@ class ProactiveEngine:
         ticks = 0
         while True:
             try:
+                # Routines are explicit instructions, so they run whatever the
+                # proactive level is — including "off".
+                if self.app.ui_ready:
+                    self.app.run_due_routines()
                 if self.level() > 0 and self.app.ui_ready:
                     ticks += 1
                     self._check_activity()
@@ -3284,6 +3291,163 @@ curves (frames, handles, grips). 1 to 8 parts, up to ~14 features per part."""
 #                 description sits in her prompt; the full instructions are
 #                 loaded for a request only when that skill is relevant.
 # ==========================================================================
+
+
+def _parse_clock(raw):
+    """'8', '8:30', '8 pm', '7:45am' -> 'HH:MM' on a 24 hour clock."""
+    t = str(raw).strip().lower().replace(".", ":")
+    pm = "pm" in t
+    am = "am" in t
+    t = t.replace("am", "").replace("pm", "").strip()
+    parts = t.split(":")
+    try:
+        hh = int(parts[0])
+        mm = int(parts[1]) if len(parts) > 1 and parts[1] else 0
+    except (ValueError, IndexError):
+        return "08:00"
+    if pm and hh < 12:
+        hh += 12
+    if am and hh == 12:
+        hh = 0
+    return f"{hh % 24:02d}:{mm % 60:02d}"
+
+
+class PushToTalk:
+    """A system-wide hotkey that wakes Amy without the wake word.
+
+    Wake words fail in a noisy room, with music playing, or when you simply
+    do not want to say her name. This registers a global Win32 hotkey and
+    runs its own message loop, so it works whatever window has focus.
+
+    Config: assistant.push_to_talk, e.g. "ctrl+alt+a". Empty disables it.
+    """
+
+    MODS = {"alt": 0x0001, "ctrl": 0x0002, "control": 0x0002,
+            "shift": 0x0004, "win": 0x0008, "windows": 0x0008}
+    # Virtual-key codes for the keys worth binding.
+    KEYS = {**{c: ord(c.upper()) for c in "abcdefghijklmnopqrstuvwxyz0123456789"},
+            "space": 0x20, "`": 0xC0, "capslock": 0x14, "tab": 0x09,
+            **{f"f{i}": 0x70 + i - 1 for i in range(1, 13)}}
+
+    def __init__(self, app):
+        self.app = app
+        self.thread = None
+        self._registered = False
+
+    @classmethod
+    def parse(cls, combo):
+        """'ctrl+alt+a' -> (modifier_mask, vk). Returns None if unusable."""
+        parts = [p.strip().lower() for p in str(combo).split("+") if p.strip()]
+        if not parts:
+            return None
+        mods, key = 0, None
+        for part in parts:
+            if part in cls.MODS:
+                mods |= cls.MODS[part]
+            else:
+                key = cls.KEYS.get(part)
+        if key is None:
+            return None
+        return mods, key
+
+    def start(self):
+        combo = str(CONFIG.get("assistant", {}).get("push_to_talk", "")).strip()
+        if not combo:
+            return False
+        if sys.platform != "win32":
+            log_debug("Push-to-talk needs Windows.")
+            return False
+        parsed = self.parse(combo)
+        if not parsed:
+            self.app.safe_log(f"Could not read push-to-talk hotkey '{combo}'. "
+                              "Use something like ctrl+alt+a.")
+            return False
+        self.thread = threading.Thread(target=self._loop, args=(parsed, combo),
+                                       daemon=True, name="push-to-talk")
+        self.thread.start()
+        return True
+
+    def _loop(self, parsed, combo):
+        """Own message loop: RegisterHotKey delivers to the registering thread."""
+        try:
+            import ctypes
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+            mods, vk = parsed
+            # MOD_NOREPEAT (0x4000) stops autorepeat firing it continuously.
+            if not user32.RegisterHotKey(None, 1, mods | 0x4000, vk):
+                self.app.safe_log(f"Could not register the hotkey '{combo}'. "
+                                  "Another application may already own it.")
+                return
+            self._registered = True
+            log_debug(f"Push-to-talk registered on {combo}.")
+            msg = wintypes.MSG()
+            while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
+                if msg.message == 0x0312:        # WM_HOTKEY
+                    try:
+                        self.app.on_push_to_talk()
+                    except Exception as e:
+                        log_debug(f"push-to-talk handler failed: {e}")
+        except Exception as e:
+            log_debug(f"push-to-talk loop failed: {e}")
+
+class ActionLog:
+    """An append-only record of everything Amy did that touched the outside
+    world — applications driven, mail sent, files written, plans approved or
+    refused. Software that can click buttons on your behalf should be able to
+    answer "what did you actually do?", so this is deliberately dumb and
+    durable: one JSON object per line, flushed immediately."""
+
+    KINDS = ("automation", "approval", "message", "file", "shell", "device", "system")
+
+    def __init__(self, path=None):
+        self.path = path or os.path.join(DATA_DIR, "actions.jsonl")
+        self.recent = []
+        self._lock = threading.Lock()
+
+    def record(self, kind, summary, detail=None, outcome="done"):
+        """Write one entry. Never raises — logging must not break an action."""
+        entry = {
+            "at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "kind": str(kind),
+            "summary": str(summary)[:400],
+            "outcome": str(outcome),
+        }
+        if detail:
+            entry["detail"] = str(detail)[:2000]
+        try:
+            with self._lock:
+                self.recent.append(entry)
+                del self.recent[:-200]
+                with io.open(self.path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    f.flush()
+        except Exception as e:
+            log_debug(f"action log write failed: {e}")
+        return entry
+
+    def since(self, hours=24, kind=None):
+        """Entries from the last N hours, newest last."""
+        cutoff = datetime.datetime.now() - datetime.timedelta(hours=float(hours))
+        out = []
+        try:
+            if os.path.exists(self.path):
+                with io.open(self.path, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            e = json.loads(line)
+                            if datetime.datetime.fromisoformat(e["at"]) >= cutoff:
+                                if kind is None or e.get("kind") == kind:
+                                    out.append(e)
+                        except Exception:
+                            continue
+        except Exception as e:
+            log_debug(f"action log read failed: {e}")
+        return out
+
 class MindFiles:
     MEMORY_LIMIT = 6000          # characters of MEMORY.md injected per turn
 
@@ -6538,6 +6702,9 @@ class AmyApp:
         self.sleeping = False
         # Notices things and speaks up on its own (started once the UI is up).
         self.proactive = ProactiveEngine(self)
+        self.actions = ActionLog()
+        self._routine_last = {}
+        self.push_to_talk = PushToTalk(self)
         self.latest_screen = None
         self.latest_screen_time = 0.0
         self._tls = threading.local()
@@ -7872,6 +8039,7 @@ class AmyApp:
                 self.run_js(f"setActiveProject({json.dumps(p.get('name',''))})")
             threading.Thread(target=self._habit_nudge_worker, daemon=True).start()
             self.proactive.start()
+            self.push_to_talk.start()
             threading.Thread(target=self._save_flush_worker, daemon=True).start()
             if CONFIG.get("camera", {}).get("start_on_launch", False):
                 self.toggle_camera(True)
@@ -8628,8 +8796,12 @@ class AmyApp:
     def send_email(self, subject, body, to_addr=None):
         to_addr = to_addr or resolve_contact("me", CONTACTS)
         if EMAIL_MODE == "smtp":
-            return self.send_email_smtp(to_addr, subject, body)
-        return self.send_email_browser(to_addr, subject, body, auto_send=EMAIL_AUTO_SEND)
+            ok = self.send_email_smtp(to_addr, subject, body)
+        else:
+            ok = self.send_email_browser(to_addr, subject, body, auto_send=EMAIL_AUTO_SEND)
+        self.actions.record("message", f"Email to {to_addr}: {subject}",
+                            detail=body, outcome="sent" if ok else "failed")
+        return ok
 
     # --- CONTINUOUS SCREEN ANALYSIS & AUTONOMOUS MOUSE AGENT ---
     def toggle_continuous_vision(self, active_state):
@@ -10109,6 +10281,7 @@ class AmyApp:
 
     def send_sms(self, recipient, message):
         """Send a text. Uses Twilio if configured, else email-to-SMS gateway."""
+        self.actions.record("message", f"Text to {recipient}", detail=message)
         number = self._resolve_phone(recipient)
         if not number:
             self.speak(f"I don't have a number for {recipient}, Sir. "
@@ -11753,6 +11926,7 @@ class AmyApp:
 
     def agent_task(self, task):
         """Coordinated multi-agent workflow: plan -> execute -> critique -> refine."""
+        self.actions.record("automation", f"Agent task: {task}")
         self.speak("Assembling a team of agents, Sir.")
         transcript = []
 
@@ -14162,6 +14336,140 @@ difference() { plate_body(); holes(); }''',
                 return m2
         return 0
 
+
+
+    def on_push_to_talk(self):
+        """Hotkey pressed: behave exactly as if the wake word had been heard.
+        Pressing it again while she is talking shuts her up, which is the
+        other thing you want a panic key for."""
+        try:
+            if self.is_speaking:
+                self.stop_speech()
+                return
+            self.actions.record("system", "Push-to-talk pressed")
+            # Mirror the wake-word branch exactly, so the follow-up window,
+            # sounds and UI all behave identically.
+            self.last_interaction = time.time()
+            self._followup_until = time.time() + 8
+            self.run_js("updateWakeTriggerUI(true)")
+            self.overlay_state("wake")
+            self.sfx.play("wake")
+            self.run_js("window.amyWakeUp && amyWakeUp()")
+            self.speak("Yes?")
+            threading.Timer(1.5, lambda: self.run_js("updateWakeTriggerUI(false)")).start()
+        except Exception as e:
+            log_debug(f"push-to-talk wake failed: {e}")
+
+    # ==================================================================
+    # ACTION LOG — what she actually did
+    # ==================================================================
+    def show_action_log(self, hours=24, kind=None):
+        """Everything she did in the last N hours, as a card."""
+        entries = self.actions.since(hours, kind)
+        if not entries:
+            self.speak(f"Nothing logged in the last {int(hours)} hours, {USER_TITLE}.")
+            return True
+        lines = []
+        for e in entries[-60:]:
+            when = e["at"][11:16]
+            mark = "" if e["outcome"] in ("done", "sent", "approved") else f"  [{e['outcome']}]"
+            lines.append(f"{when}  {e['kind']:<10} {e['summary']}{mark}")
+        self.instantiate_card(f"Actions - last {int(hours)}h", "code_bug", "\n".join(lines))
+        self.speak(f"{len(entries)} actions in the last {int(hours)} hours, {USER_TITLE}. "
+                   "They're on screen.")
+        return True
+
+    # ==================================================================
+    # ROUTINES — things that run on a schedule
+    # ==================================================================
+    # Stored in config as a list of {name, at: "HH:MM", days: [0-6] or "daily",
+    # command: "<what to say to her>", enabled: bool}. The proactive engine's
+    # heartbeat fires them, so there is no second timer thread to manage.
+
+    def _routines(self):
+        r = CONFIG.setdefault("routines", [])
+        return r if isinstance(r, list) else []
+
+    def add_routine(self, name, at, command, days="daily"):
+        """Create a routine. `at` is 24h HH:MM; `command` is said to her as if spoken."""
+        try:
+            hh, mm = [int(x) for x in str(at).replace(".", ":").split(":")[:2]]
+            assert 0 <= hh <= 23 and 0 <= mm <= 59
+        except Exception:
+            self.speak(f"I need a time like 8:30 for that routine, {USER_TITLE}.")
+            return True
+        name = str(name).strip() or "routine"
+        routines = [r for r in self._routines() if r.get("name", "").lower() != name.lower()]
+        routines.append({"name": name, "at": f"{hh:02d}:{mm:02d}", "days": days,
+                         "command": str(command).strip(), "enabled": True})
+        CONFIG["routines"] = routines
+        save_config(CONFIG)
+        self.actions.record("system", f"Routine added: {name} at {hh:02d}:{mm:02d}")
+        self.speak(f"{name} will run at {hh:02d}:{mm:02d}, {USER_TITLE}.")
+        return True
+
+    def remove_routine(self, name):
+        routines = self._routines()
+        keep = [r for r in routines if r.get("name", "").lower() != str(name).strip().lower()]
+        if len(keep) == len(routines):
+            self.speak(f"I don't have a routine called {name}, {USER_TITLE}.")
+            return True
+        CONFIG["routines"] = keep
+        save_config(CONFIG)
+        self.speak(f"Removed {name}, {USER_TITLE}.")
+        return True
+
+    def list_routines(self):
+        routines = self._routines()
+        if not routines:
+            self.speak(f"No routines set up, {USER_TITLE}. Say 'every day at 8, "
+                       "brief me' to make one.")
+            return True
+        rows = [f"{r['at']}  {r.get('days', 'daily'):<8} {r['name']}"
+                + ("" if r.get("enabled", True) else "  (off)")
+                + f"\n          {r.get('command', '')}"
+                for r in sorted(routines, key=lambda x: x.get("at", ""))]
+        self.instantiate_card("Routines", "code_bug", "\n".join(rows))
+        self.speak(f"{len(routines)} routine{'s' if len(routines) != 1 else ''}, {USER_TITLE}.")
+        return True
+
+    def _due_routines(self, now=None):
+        """Routines whose minute has arrived and which have not run in it yet."""
+        now = now or datetime.datetime.now()
+        stamp = now.strftime("%Y-%m-%d %H:%M")
+        due = []
+        for r in self._routines():
+            if not r.get("enabled", True):
+                continue
+            if r.get("at") != now.strftime("%H:%M"):
+                continue
+            days = r.get("days", "daily")
+            if isinstance(days, list) and now.weekday() not in days:
+                continue
+            if days == "weekdays" and now.weekday() > 4:
+                continue
+            if days == "weekends" and now.weekday() < 5:
+                continue
+            if self._routine_last.get(r.get("name")) == stamp:
+                continue
+            self._routine_last[r.get("name")] = stamp
+            due.append(r)
+        return due
+
+    def run_due_routines(self):
+        """Called from the heartbeat. Each routine is handled as spoken input."""
+        try:
+            for r in self._due_routines():
+                cmd = r.get("command", "").strip()
+                if not cmd:
+                    continue
+                self.actions.record("system", f"Routine fired: {r.get('name')}", detail=cmd)
+                self.safe_log(f"Routine '{r.get('name')}' -> {cmd}")
+                threading.Thread(target=self.process_command_backend,
+                                 args=(cmd,), daemon=True).start()
+        except Exception as e:
+            log_debug(f"routine check failed: {e}")
+
     # ==================================================================
     # TRUST — approve before acting, and see exactly what changed
     # ==================================================================
@@ -14204,9 +14512,15 @@ difference() { plate_body(); holes(); }''',
             self.awaiting_approval = False
             self.pending_plan = None
             self.run_js("hideApproval()")
+            self.actions.record("approval", f"{name} - cancelled, no answer",
+                                detail=request, outcome="timeout")
             self.speak("No answer, so I've cancelled it, Sir.")
             return False
-        return bool(self.approval_result)
+        ok = bool(self.approval_result)
+        self.actions.record("approval", f"{name} - {'approved' if ok else 'refused'}",
+                            detail=f"{len(steps)} steps: {request}",
+                            outcome="approved" if ok else "refused")
+        return ok
 
     def resolve_approval(self, approved):
         """Called by the UI or by a spoken yes/no."""
@@ -17184,6 +17498,25 @@ RULES
             self.speak(f"Got it. {alias.group(1)} means {alias.group(2)}.")
             return True
 
+        # --- ACTION LOG ---
+        if re.search(r"what (have you|did you) (done|do)|your action log|"
+                     r"show (me )?(your |the )?(action )?log", cmd):
+            m = re.search(r"last (\d+) hours?", cmd)
+            return self.show_action_log(int(m.group(1)) if m else 24)
+
+        # --- ROUTINES ---
+        routine_add = (re.search(r"every (?:day|morning|evening) at (\d{1,2}(?::\d{2})?\s*(?:am|pm)?),? (.+)", cmd)
+                       or re.search(r"(?:every )?(weekday|weekend)s? at (\d{1,2}(?::\d{2})?\s*(?:am|pm)?),? (.+)", cmd))
+        if routine_add:
+            g = routine_add.groups()
+            days, raw_time, what = ("daily", g[0], g[1]) if len(g) == 2 else (g[0] + "s", g[1], g[2])
+            return self.add_routine(what[:40], _parse_clock(raw_time), what, days)
+        if re.search(r"(list|what) routines|my routines", cmd):
+            return self.list_routines()
+        routine_rm = re.search(r"(?:remove|delete|stop|cancel) (?:the )?routine (.+)", cmd)
+        if routine_rm:
+            return self.remove_routine(routine_rm.group(1).strip())
+
         # --- CAMERAS ---
         if re.search(r'\b(scan|look) for cameras\b|\bfind (my )?cameras\b', cmd):
             return self.scan_cameras()
@@ -18618,6 +18951,16 @@ class AmyAPI:
     # --- Desk camera ---
     def toggle_camera(self, active=None):
         self._app.toggle_camera(active)
+
+    # --- Action log & routines ---
+    def show_action_log(self, hours=24):
+        threading.Thread(target=self._app.show_action_log, args=(hours,), daemon=True).start()
+
+    def list_routines(self):
+        threading.Thread(target=self._app.list_routines, daemon=True).start()
+
+    def remove_routine(self, name):
+        threading.Thread(target=self._app.remove_routine, args=(name,), daemon=True).start()
 
     # --- Multiple cameras ---
     def switch_camera(self, which):

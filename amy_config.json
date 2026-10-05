@@ -86,7 +86,8 @@
         "input_device": "",
         "max_phrase_seconds": 45,
         "continuation_listening": true,
-        "max_continuations": 2
+        "max_continuations": 2,
+        "push_to_talk": ""
     },
     "camera": {
         "device_index": 0,
@@ -195,5 +196,6 @@
         "sleep_minutes": 10,
         "show_chat": false,
         "layout_version": 2
-    }
+    },
+    "routines": []
 }
