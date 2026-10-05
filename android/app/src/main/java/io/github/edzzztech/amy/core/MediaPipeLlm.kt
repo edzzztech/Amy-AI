@@ -53,11 +53,14 @@ class MediaPipeLlm(private val context: Context) : LlmEngine {
         val file = File(modelPath)
         if (!file.exists() || file.length() == 0L) return false
         return try {
-            val options = LlmInference.LlmInferenceOptions.builder()
-                .setModelPath(file.absolutePath)
-                .setMaxTokens(MAX_TOKENS)
-                .build()
-            engine = LlmInference.createFromOptions(context, options)
+            // GPU first: on a phone it is several times faster than CPU for
+            // these models. Not every device or model supports it, so a failure
+            // falls back rather than leaving her unable to answer at all.
+            engine = try {
+                LlmInference.createFromOptions(context, buildOptions(file, gpu = true))
+            } catch (e: Throwable) {
+                LlmInference.createFromOptions(context, buildOptions(file, gpu = false))
+            }
             true
         } catch (e: Throwable) {
             // An unsupported model or an out-of-memory kill are both ordinary
@@ -122,7 +125,19 @@ class MediaPipeLlm(private val context: Context) : LlmEngine {
         engine = null
     }
 
+    private fun buildOptions(file: File, gpu: Boolean) =
+        LlmInference.LlmInferenceOptions.builder()
+            .setModelPath(file.absolutePath)
+            // A smaller window is markedly faster to prefill and is plenty for
+            // short spoken exchanges; long documents are truncated anyway.
+            .setMaxTokens(MAX_TOKENS)
+            .apply {
+                if (gpu) setPreferredBackend(LlmInference.Backend.GPU)
+                else setPreferredBackend(LlmInference.Backend.CPU)
+            }
+            .build()
+
     private companion object {
-        const val MAX_TOKENS = 1024
+        const val MAX_TOKENS = 512
     }
 }

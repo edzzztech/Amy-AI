@@ -41,6 +41,7 @@ class AmyService : LifecycleService() {
         }
 
         listener = WakeListener(this) { heard -> onHeard(heard) }.also { it.start() }
+        Amy.warmUp()        // load the model now, not on the first question
         Amy.actions.record("system", "Listening started")
     }
 

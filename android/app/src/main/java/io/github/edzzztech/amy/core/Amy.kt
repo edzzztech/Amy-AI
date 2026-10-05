@@ -90,7 +90,7 @@ object Amy {
         val buffer = SentenceBuffer()
         val whole = StringBuilder()
         try {
-            llm.generate(prompt, system = SYSTEM_PROMPT).collect { token ->
+            llm.generate(withHistory(prompt), system = SYSTEM_PROMPT).collect { token ->
                 whole.append(token)
                 if (spoken) buffer.push(token).forEach { tts?.speak(it) }
                 AmyState.setReply(whole.toString())
@@ -121,6 +121,28 @@ object Amy {
         scope.launch { converse(prompt, spoken = false) }
     }
 
+    /**
+     * Give the model the last few turns, so follow-ups like "and the other one?"
+     * mean something. Kept short deliberately: every token of history is one
+     * less of context and one more to prefill, and on a phone prefill is most
+     * of the wait before she starts talking.
+     */
+    private fun withHistory(prompt: String): String {
+        val recent = conversations.turns()
+            .dropLast(1)                       // the current message is the prompt
+            .takeLast(HISTORY_TURNS)
+        if (recent.isEmpty()) return prompt
+        return buildString {
+            recent.forEach { turn ->
+                append(if (turn.role == "you") "User: " else "Amy: ")
+                append(turn.text.take(300))
+                append('\n')
+            }
+            append("User: ")
+            append(prompt)
+        }
+    }
+
     private fun deliver(reply: String, spoken: Boolean) {
         conversations.append("amy", reply)
         AmyState.setTurns(conversations.turns())
@@ -140,7 +162,18 @@ object Amy {
 
     fun stopSpeaking() = tts?.stop()
 
+    /** Load the model before it is first asked for, so the first reply is not slow. */
+    fun warmUp() {
+        scope.launch {
+            if (llm.isLoaded) return@launch
+            llm.findModel()?.let { llm.load(it.absolutePath) }
+        }
+    }
+
+    private const val HISTORY_TURNS = 6
+
     const val SYSTEM_PROMPT =
         "You are Amy, a concise assistant running on the user's phone. " +
-            "Answer in one or two short sentences unless asked for detail."
+            "Answer in one or two short sentences unless asked for detail. " +
+            "Never invent facts about the user's device, files or apps."
 }
