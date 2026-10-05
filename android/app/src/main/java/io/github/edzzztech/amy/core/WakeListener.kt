@@ -43,7 +43,8 @@ class WakeListener(
         stt.onFinal = { text ->
             AmyState.setHeard("")
             handle(text)
-            restartSoon(400)
+            // Short gap only: the recogniser is reused, so resuming is silent.
+            restartSoon(250)
         }
         stt.onError = {
             // Silence and no-match are the normal case when nobody is talking,
@@ -72,8 +73,18 @@ class WakeListener(
         enabled = false
         stopping = true
         main.removeCallbacksAndMessages(null)
-        stt.stop()
+        // pause(), not stop(): keeping the recogniser alive means waking her
+        // again does not replay the device's start cue.
+        stt.pause()
         AmyState.setState(Listening.Idle)
+    }
+
+    /** Release the recogniser for good. Only when the service is going away. */
+    fun release() {
+        enabled = false
+        stopping = true
+        main.removeCallbacksAndMessages(null)
+        stt.stop()
     }
 
     /** Called after she finishes replying, to open the follow-up window. */
@@ -131,7 +142,7 @@ class WakeListener(
         if (!enabled || stopping) return
         main.removeCallbacksAndMessages(null)
         main.postDelayed({
-            if (enabled && !stopping) stt.start()
+            if (enabled && !stopping) stt.listen()
         }, delayMs)
     }
 

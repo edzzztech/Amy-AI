@@ -54,6 +54,9 @@ class MainActivity : ComponentActivity() {
                     onMic = ::toggleListening,
                     onNewConversation = Amy::newConversation,
                     onOpenConversation = Amy::openConversation,
+                    onAttach = { pickFile.launch(arrayOf("*/*")) },
+                    onCamera = { CameraActivity.open(this) },
+                    onOverlay = ::toggleOverlay,
                 )
             }
         }
@@ -65,6 +68,37 @@ class MainActivity : ComponentActivity() {
         } else {
             requestMic.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    private val pickFile = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { attach(it) } }
+
+    /** Read a file and ask her about it in one step. */
+    private fun attach(uri: android.net.Uri) {
+        val reader = Attachments(this)
+        val file = reader.read(uri)
+        if (!file.readable) {
+            AmyState.setProblem(
+                "I can't read " + file.name + ". Plain text, Markdown, CSV, JSON and " +
+                    "code are fine; PDFs and Word files need a parser I don't have yet."
+            )
+            return
+        }
+        AmyState.setProblem(null)
+        Amy.actions.record("file", "Attached " + file.name)
+        Amy.submitRaw(shown = "Attached " + file.name, prompt = reader.asPrompt(file, ""))
+    }
+
+    /** The floating orb. Needs a permission only Settings can grant. */
+    private fun toggleOverlay() {
+        if (!OverlayService.isAllowed(this)) {
+            AmyState.setProblem("Allow Amy to draw over other apps, then tap again.")
+            startActivity(OverlayService.permissionIntent(this))
+            return
+        }
+        AmyState.setProblem(null)
+        startService(Intent(this, OverlayService::class.java))
     }
 
     /** The mic button now wakes or sleeps the always-on listener. */
@@ -105,6 +139,9 @@ fun Screen(
     onMic: () -> Unit,
     onNewConversation: () -> Unit,
     onOpenConversation: (String) -> Unit,
+    onAttach: () -> Unit,
+    onCamera: () -> Unit,
+    onOverlay: () -> Unit,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -123,6 +160,9 @@ fun Screen(
         Home(
             onSend = onSend,
             onMic = onMic,
+            onAttach = onAttach,
+            onCamera = onCamera,
+            onOverlay = onOverlay,
             onOpenDrawer = { scope.launch { drawerState.open() } },
         )
     }
@@ -180,6 +220,9 @@ private fun HistoryDrawer(
 private fun Home(
     onSend: (String) -> Unit,
     onMic: () -> Unit,
+    onAttach: () -> Unit,
+    onCamera: () -> Unit,
+    onOverlay: () -> Unit,
     onOpenDrawer: () -> Unit,
 ) {
     val state by AmyState.state.collectAsState()
@@ -280,6 +323,12 @@ private fun Home(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                ToolButton("file", onAttach)
+                Spacer(Modifier.width(6.dp))
+                ToolButton("cam", onCamera)
+                Spacer(Modifier.width(6.dp))
+                ToolButton("orb", onOverlay)
+                Spacer(Modifier.width(8.dp))
                 OutlinedTextField(
                     value = draft,
                     onValueChange = { draft = it },
@@ -409,5 +458,19 @@ private fun MicOrSend(hasDraft: Boolean, state: Listening, onClick: () -> Unit) 
             fontSize = 17.sp,
             color = if (state == Listening.Muted && !hasDraft) Muted else Color(0xFF04221D),
         )
+    }
+}
+
+@Composable
+private fun ToolButton(label: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, fontSize = 10.sp, letterSpacing = 0.5.sp, color = Muted)
     }
 }

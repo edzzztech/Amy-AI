@@ -109,6 +109,18 @@ object Amy {
         if (!spoken) AmyState.setState(Listening.Idle)
     }
 
+    /**
+     * Submit where what the model sees and what the conversation shows differ —
+     * an attached file, say, where the prompt carries the whole document but the
+     * transcript should only show its name.
+     */
+    fun submitRaw(shown: String, prompt: String) {
+        conversations.append("you", shown)
+        AmyState.setTurns(conversations.turns())
+        AmyState.setState(Listening.Thinking)
+        scope.launch { converse(prompt, spoken = false) }
+    }
+
     private fun deliver(reply: String, spoken: Boolean) {
         conversations.append("amy", reply)
         AmyState.setTurns(conversations.turns())

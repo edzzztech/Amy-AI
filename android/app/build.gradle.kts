@@ -56,5 +56,12 @@ dependencies {
     // of llama.cpp; LlmEngine is the seam if we ever need to swap it.
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
 
+    // Camera mode
+    val camerax = "1.4.1"
+    implementation("androidx.camera:camera-core:$camerax")
+    implementation("androidx.camera:camera-camera2:$camerax")
+    implementation("androidx.camera:camera-lifecycle:$camerax")
+    implementation("androidx.camera:camera-view:$camerax")
+
     testImplementation("junit:junit:4.13.2")
 }

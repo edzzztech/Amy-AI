@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission
         android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- The floating orb. Granted by the user in Settings, not by a prompt. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
@@ -62,6 +64,17 @@
             android:name=".AmyService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <activity
+            android:name=".CameraActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.Amy" />
+
+        <!-- The floating orb above other apps. -->
+        <service
+            android:name=".OverlayService"
+            android:exported="false" />
 
         <!-- Drives other apps. Works without root; root adds the rest. -->
         <service

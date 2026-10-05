@@ -77,7 +77,7 @@ class AmyService : LifecycleService() {
     }
 
     override fun onDestroy() {
-        listener?.stop()
+        listener?.release()
         listener = null
         Amy.actions.record("system", "Listening stopped")
         super.onDestroy()
