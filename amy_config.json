@@ -87,7 +87,8 @@
         "max_phrase_seconds": 45,
         "continuation_listening": true,
         "max_continuations": 2,
-        "push_to_talk": ""
+        "push_to_talk": "",
+        "attach_chars": 24000
     },
     "camera": {
         "device_index": 0,
@@ -189,7 +190,8 @@
             "overlay": true,
             "agenda": false,
             "stop": false,
-            "settings": true
+            "settings": true,
+            "attach": true
         },
         "sounds": true,
         "sound_volume": 0.6,

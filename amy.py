@@ -1066,7 +1066,7 @@ DEFAULT_CONFIG = {
         "theme": "arc",
         "bottom_bar": {
             "chat": True, "mic": True, "convo": True, "camera": True,
-            "screenlens": True, "calendar": False, "undo": False, "lenshist": False, "detach": False,
+            "screenlens": True, "attach": True, "calendar": False, "undo": False, "lenshist": False, "detach": False,
             "overlay": True, "agenda": False, "stop": False, "settings": True
         },
         # (layout_version is deliberately absent here so older configs get the one-time tidy)
@@ -6246,6 +6246,7 @@ window.amyClearSuggestion = function (id) {
             calendar:  'M4 6h16v14H4z M4 10h16 M8 3v4 M16 3v4',
             undo:      'M4 10h10a5 5 0 0 1 0 10H9 M4 10l4-4 M4 10l4 4',
             gallery:   'M3 5h18v14H3z M3 15l5-5 4 4 3-3 6 6',
+            attach:    'M20 11.5l-8.2 8.2a4.2 4.2 0 0 1-6-6l8.5-8.5a2.8 2.8 0 0 1 4 4l-8.5 8.5a1.4 1.4 0 0 1-2-2l7.8-7.8',
             detach:    'M4 4h9v9H4z M11 11h9v9h-9z',
             ring:      'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18z M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8z',
             agenda:    'M5 4h14v16H5z M9 9h6 M9 13h6 M9 17h3',
@@ -6274,6 +6275,7 @@ window.amyClearSuggestion = function (id) {
             { key:'convo',      icon:'convo',    title:'Conversation Mode', action:()=>pywebview.api.toggle_conversation() },
             { key:'camera',     icon:'camera',   title:'Desk View',         action:()=>pywebview.api.toggle_camera() },
             { key:'screenlens', icon:'lens',     title:'Read My Screen',    action:()=>pywebview.api.screen_lens('explain') },
+            { key:'attach',     icon:'attach',   title:'Attach a File',     action:()=>pywebview.api.attach_file() },
             { key:'calendar',   icon:'calendar', title:"Today's Schedule",  action:()=>pywebview.api.calendar_view('today') },
             { key:'agenda',     icon:'agenda',   title:'Agenda',            action:()=>pywebview.api.calendar_agenda(7) },
             { key:'lenshist',   icon:'gallery',  title:'Lens History',      action:()=>pywebview.api.lens_history_view() },
@@ -14360,6 +14362,91 @@ difference() { plate_body(); holes(); }''',
         except Exception as e:
             log_debug(f"push-to-talk wake failed: {e}")
 
+
+    def attach_file(self, path=None, question=""):
+        """Read a file and answer a question about it.
+
+        The phone build does the same thing, and deliberately the same way: the
+        text is read here, truncated visibly rather than silently overflowing
+        the context, and handed to the model as part of the prompt. Unlike the
+        phone, the desktop already has parsers for PDF and Word, so those work.
+        """
+        if not path:
+            path = self._ask_for_file()
+            if not path:
+                return True
+
+        path = os.path.expanduser(str(path))
+        if not os.path.isfile(path):
+            hits = self.find_recent_files(path, limit=1)
+            path = hits[0] if hits else path
+        if not os.path.isfile(path):
+            self.speak(f"I can't find that file, {USER_TITLE}.")
+            return True
+
+        name = os.path.basename(path)
+        text = self._read_any(path)
+        if not text.strip():
+            self.speak(f"There's no readable text in {name}, {USER_TITLE}.")
+            return True
+
+        limit = int(CONFIG.get("assistant", {}).get("attach_chars", 24000))
+        truncated = len(text) > limit
+        body = text[:limit]
+
+        self.actions.record("file", f"Attached {name}", detail=f"{len(text)} chars")
+        self.instantiate_card(f"Attached: {name}", "email_draft",
+                              body[:1500] + ("\n\n[...]" if len(body) > 1500 else ""))
+        self.speak(f"Reading {name}, {USER_TITLE}.")
+
+        prompt = (f"Here is a file called {name}"
+                  + (" (first part only)" if truncated else "") + ":\n\n"
+                  + body + "\n\n"
+                  + (question.strip() or
+                     "Summarise this: what it is, the key points, and anything "
+                     "that needs action."))
+        self.current_attachment = {"name": name, "path": path, "text": body}
+        self._dispatch_command(prompt)
+        return True
+
+    def _ask_for_file(self):
+        """Open a native file picker on the UI thread."""
+        try:
+            def pick():
+                name, _ = QtWidgets.QFileDialog.getOpenFileName(
+                    None, "Attach a file", os.path.expanduser("~"),
+                    "Documents (*.txt *.md *.csv *.json *.xml *.log *.py *.js *.html "
+                    "*.pdf *.docx);;All files (*.*)")
+                return name
+            return gui().call(pick, timeout=120)
+        except Exception as e:
+            log_debug(f"file picker failed: {e}")
+            self.speak(f"I couldn't open the file picker, {USER_TITLE}. "
+                       "Say 'read' and the file name instead.")
+            return None
+
+    def _read_any(self, path):
+        """Text out of txt/md/code, PDF or Word. Empty string if we cannot."""
+        ext = os.path.splitext(path)[1].lower()
+        try:
+            if ext == ".pdf":
+                try:
+                    from pypdf import PdfReader
+                except ImportError:
+                    return ""
+                return "\n".join((pg.extract_text() or "") for pg in PdfReader(path).pages)
+            if ext == ".docx":
+                try:
+                    import docx
+                except ImportError:
+                    return ""
+                return "\n".join(par.text for par in docx.Document(path).paragraphs)
+            with io.open(path, encoding="utf-8", errors="replace") as f:
+                return f.read()
+        except Exception as e:
+            log_debug(f"attach read error: {e}")
+            return ""
+
     # ==================================================================
     # ACTION LOG — what she actually did
     # ==================================================================
@@ -17498,6 +17585,14 @@ RULES
             self.speak(f"Got it. {alias.group(1)} means {alias.group(2)}.")
             return True
 
+        # --- ATTACHMENTS ---
+        attach = re.search(r"(?:attach|read|open|look at|summarise|summarize) "
+                           r"(?:the )?(?:file|document|pdf) ?(.*)", cmd)
+        if attach:
+            return self.attach_file(attach.group(1).strip() or None)
+        if re.search(r"\battach a file\b|\bpick a file\b|\bchoose a file\b", cmd):
+            return self.attach_file()
+
         # --- ACTION LOG ---
         if re.search(r"what (have you|did you) (done|do)|your action log|"
                      r"show (me )?(your |the )?(action )?log", cmd):
@@ -18951,6 +19046,10 @@ class AmyAPI:
     # --- Desk camera ---
     def toggle_camera(self, active=None):
         self._app.toggle_camera(active)
+
+    def attach_file(self, path=None, question=""):
+        threading.Thread(target=self._app.attach_file,
+                         args=(path, question), daemon=True).start()
 
     # --- Action log & routines ---
     def show_action_log(self, hours=24):
