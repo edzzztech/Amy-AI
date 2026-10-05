@@ -3758,7 +3758,7 @@ HTML_UI = r"""
             box-shadow: 0 2px 20px rgba(94,234,212, 0.12);
             -webkit-app-region: drag;
         }
-        .titlebar .tb-left { display: flex; align-items: center; gap: 12px; }
+        .titlebar .tb-left { display: flex; align-items: center;  }
         .tb-orb { width: 14px; height: 14px; border-radius: 50%;
             background: radial-gradient(circle at 35% 35%, #99f6e4, var(--accent) 60%, #026 100%);
             box-shadow: 0 0 12px var(--accent); animation: tb-pulse 2.6s ease-in-out infinite; }
@@ -3767,8 +3767,8 @@ HTML_UI = r"""
         .tb-title { font-size: 13px; font-weight: bold; letter-spacing: 6px; color: #e8eaf2;
             text-shadow: 0 0 10px var(--accent-soft); }
         .tb-sub { font-size: 9px; letter-spacing: 3px; color: var(--text-dim); margin-left: 6px; }
-        .tb-right { display: flex; align-items: center; gap: 14px; -webkit-app-region: no-drag; }
-        .win-controls { display: flex; gap: 4px; margin-left: 6px; -webkit-app-region: no-drag; }
+        .tb-right { display: flex; align-items: center;  -webkit-app-region: no-drag; }
+        .win-controls { display: flex;  margin-left: 6px; -webkit-app-region: no-drag; }
         .win-btn {
             width: 30px; height: 24px; border-radius: 6px; cursor: pointer;
             background: rgba(94,234,212,0.07); border: 1px solid rgba(94,234,212,0.28);
@@ -3781,7 +3781,7 @@ HTML_UI = r"""
         .win-btn.close:hover { background: #ff2e63; color: #fff; box-shadow: 0 0 10px #ff2e63; }
         .tb-stat { font-size: 9px; letter-spacing: 2px; color: var(--text-dim); }
         .tb-stat b { color: var(--green); }
-        .tb-lines { display: flex; gap: 3px; align-items: flex-end; height: 14px; }
+        .tb-lines { display: flex;  align-items: flex-end; height: 14px; }
         .tb-lines i { width: 3px; background: var(--accent); border-radius: 2px; animation: eq 1s ease-in-out infinite; opacity: 0.8; }
         .tb-lines i:nth-child(1){height:6px;animation-delay:0s} .tb-lines i:nth-child(2){height:12px;animation-delay:.15s}
         .tb-lines i:nth-child(3){height:8px;animation-delay:.3s} .tb-lines i:nth-child(4){height:14px;animation-delay:.45s}
@@ -3907,12 +3907,12 @@ HTML_UI = r"""
 
         /* ===== STAGE SYSTEM (fullscreen panels like the desk cam) ===== */
         .stage {
-            position: fixed; inset: 42px 0 0 0; z-index: 40;
+            position: fixed; top: 42px; right: 0; bottom: 0; left: 0; z-index: 40;
             background: radial-gradient(ellipse at center, #070d16 0%, #04070c 100%);
             display: none; overflow: hidden;
         }
         .stage.active { display: block; }
-        .stage-hud { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+        .stage-hud { position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; z-index: 3; }
         .stage-hud .brk { position: absolute; width: 44px; height: 44px; border-color: rgba(94,234,212,0.75); }
         .stage-hud .brk.tl { top: 22px; left: 22px; border-top: 2px solid; border-left: 2px solid; }
         .stage-hud .brk.tr { top: 22px; right: 22px; border-top: 2px solid; border-right: 2px solid; }
@@ -3928,10 +3928,10 @@ HTML_UI = r"""
             color: #ff5c7a; width: 30px; height: 26px; border-radius: 6px; cursor: pointer;
         }
         .stage-close:hover { background: #ff2e63; color: #fff; }
-        .stage-body { position: absolute; inset: 70px 60px 96px 60px; display: flex; gap: 18px; }
+        .stage-body { position: absolute; top: 70px; right: 60px; bottom: 96px; left: 60px; display: flex; gap: 18px; }
         .stage-bar {
             position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 10px; z-index: 6; pointer-events: auto;
+            display: flex;  z-index: 6; pointer-events: auto;
             background: rgba(5,12,20,0.6); border: 1px solid rgba(94,234,212,0.3);
             padding: 8px 14px; border-radius: 30px; backdrop-filter: blur(8px);
         }
@@ -3952,19 +3952,19 @@ HTML_UI = r"""
         /* The feed fills the app; the reactor shrinks and docks bottom-right,
            blending into the video rather than sitting on top of it. */
         #camFullscreen {
-            position: fixed; inset: 42px 0 0 0; z-index: 40;
+            position: fixed; top: 42px; right: 0; bottom: 0; left: 0; z-index: 40;
             background: #000; display: none; overflow: hidden;
         }
         #camFullscreen.active { display: block; }
         #camFullImg { width: 100%; height: 100%; object-fit: cover; display: block; }
         /* Vignette + scanlines so the feed reads as a HUD rather than a raw webcam */
         #camFullscreen::after {
-            content: ''; position: absolute; inset: 0; pointer-events: none;
+            content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none;
             background:
               repeating-linear-gradient(rgba(0,0,0,0.10) 0 1px, transparent 1px 3px),
               radial-gradient(ellipse at center, transparent 55%, rgba(0,10,18,0.75) 100%);
         }
-        .cam-hud { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+        .cam-hud { position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; z-index: 2; }
         .cam-hud .brk { position: absolute; width: 44px; height: 44px; border-color: rgba(94,234,212,0.8); }
         .cam-hud .brk.tl { top: 22px; left: 22px; border-top: 2px solid; border-left: 2px solid; }
         .cam-hud .brk.tr { top: 22px; right: 22px; border-top: 2px solid; border-right: 2px solid; }
@@ -3980,7 +3980,7 @@ HTML_UI = r"""
         }
         #camFullBar {
             position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 10px; z-index: 5; pointer-events: auto;
+            display: flex;  z-index: 5; pointer-events: auto;
             background: rgba(5,12,20,0.55); border: 1px solid rgba(94,234,212,0.3);
             padding: 8px 14px; border-radius: 30px; backdrop-filter: blur(8px);
         }
@@ -4082,7 +4082,7 @@ HTML_UI = r"""
 
         /* Bottom dock */
         .bottom-control-bar { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 10px; z-index: 1000; pointer-events: auto; align-items: center;
+            display: flex;  z-index: 1000; pointer-events: auto; align-items: center;
             background: rgba(9,13,22,0.9); padding: 9px 18px; border-radius: 40px; border: 1px solid var(--border-lit);
             backdrop-filter: blur(12px); box-shadow: 0 8px 30px rgba(0,0,0,0.7), 0 0 18px rgba(94,234,212,0.12); }
         .hud-btn { background: rgba(94,234,212,0.06); border: 1px solid var(--border-lit); color: var(--accent);
@@ -4099,7 +4099,7 @@ HTML_UI = r"""
 
         .watermark { position: absolute; bottom: 14px; right: 22px; font-size: 10px; color: rgba(94,234,212,0.3); letter-spacing: 2px; z-index: 5; pointer-events: none; }
 
-        .spotify-controls { display: flex; gap: 12px; }
+        .spotify-controls { display: flex;  }
         .spotify-controls button { background: #131c2e; border: 1px solid var(--green); color: var(--green);
             width: 34px; height: 34px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; }
         .spotify-controls button.play-btn { background: var(--green); color: var(--bg); }
@@ -4139,9 +4139,9 @@ HTML_UI = r"""
         body { background: var(--bg); color: var(--text); background-image: none; }
 
         /* Living background: a slowly drifting gradient (canvas) under a quiet grid */
-        #amyBg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0;
+        #amyBg { position: fixed; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; z-index: 0;
                  pointer-events: none; display: block; }
-        #amyGrid { position: fixed; inset: 0; z-index: 0; pointer-events: none;
+        #amyGrid { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 0; pointer-events: none;
             background-image:
                 linear-gradient(rgba(255,255,255,0.055) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(255,255,255,0.055) 1px, transparent 1px);
@@ -4169,7 +4169,7 @@ HTML_UI = r"""
         /* The orb: drawn on canvas, the name sits on top in real type */
         .reactor-container { width: 360px; height: 360px; }
         .reactor-container .ring { display: none; }
-        .reactor-container canvas.amy-orb { position: absolute; inset: 0; width: 100%; height: 100%; }
+        .reactor-container canvas.amy-orb { position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; }
         .reactor-container .core-center,
         .reactor-container.listening .core-center,
         .reactor-container.wake-triggered .core-center,
@@ -4243,7 +4243,7 @@ HTML_UI = r"""
         /* Chat: a log, not a conversation bubble stack. */
         .chat-messages { color: #b9bfcd; font-size: 12.5px; line-height: 1.6; padding: 8px 10px; }
         .chat-input-area { background: #0e1118; border-top: 1px solid #262a36;
-            padding: 8px; gap: 6px; }
+            padding: 8px;  }
         .chat-input-area input, .stage-input, .scratchpad-area, #todoInput, #docEditInstruction {
             background: #07090e; border: 1px solid #262a36; color: var(--text);
             border-radius: 0; padding: 7px 9px; font-size: 12.5px;
@@ -4291,7 +4291,7 @@ HTML_UI = r"""
            width:max-content is load-bearing: absolutely positioned at left:50%,
            shrink-to-fit only offers half the window, so the bar wrapped early. */
         .stage-bar, #camFullBar { background: var(--glass-strong); border: 1px solid var(--border);
-            bottom: 104px; border-radius: 16px; padding: 10px 12px; gap: 4px; flex-wrap: wrap;
+            bottom: 104px; border-radius: 16px; padding: 10px 12px;  flex-wrap: wrap;
             width: max-content; max-width: 92vw; justify-content: center;
             backdrop-filter: blur(24px) saturate(140%); box-shadow: 0 18px 50px rgba(0,0,0,0.5);
             display: flex; align-items: center; }
@@ -4325,12 +4325,12 @@ HTML_UI = r"""
             transition: border-color 0.2s ease, box-shadow 0.2s ease; }
         .amy-dock:focus-within { border-color: var(--border-lit); box-shadow: 0 20px 56px rgba(0,0,0,0.55); }
         .amy-dock .dock-shape { display: none; }
-        .amy-dock .dock-inner { position: relative; display: flex; align-items: center; gap: 10px; }
+        .amy-dock .dock-inner { position: relative; display: flex; align-items: center;  }
         .dock-ask { flex: 1; min-width: 220px; background: transparent; border: none; outline: none;
             color: var(--text); font-size: 14px; padding: 10px 4px; caret-color: var(--accent); }
         .dock-ask::placeholder { color: var(--text-dim); }
         .bottom-control-bar { position: static; transform: none; background: none; border: none;
-            box-shadow: none; padding: 0; gap: 4px; backdrop-filter: none; }
+            box-shadow: none; padding: 0;  backdrop-filter: none; }
         .hud-btn { width: 36px; height: 36px; border-radius: 10px; background: transparent;
             border: none; color: var(--text-dim); }
         .hud-btn:hover { background: rgba(255,255,255,0.07); color: var(--text); box-shadow: none; transform: none; }
@@ -4399,7 +4399,7 @@ HTML_UI = r"""
             opacity: 0; transition: opacity .5s; pointer-events: none; }
         #amyStatusPill.show { opacity: 1; }
         #amyStatusPill.warn { color: #fbbf24; border-color: rgba(245,158,11,0.4); }
-        #amySleep { position: fixed; inset: 0; z-index: 5000; background: rgba(5,7,9,0.975);
+        #amySleep { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 5000; background: rgba(5,7,9,0.975);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             opacity: 0; pointer-events: none; transition: opacity 1.2s ease; cursor: default; }
         #amySleep.on { opacity: 1; pointer-events: auto; }
@@ -4412,6 +4412,22 @@ HTML_UI = r"""
             animation: breathe 5s ease-in-out infinite; }
         #amySleep .hint { margin-top: 22px; font-size: 11px; letter-spacing: 2px; color: rgba(207,227,247,0.35); }
         @keyframes breathe { 0%,100% { transform: scale(.82); opacity: .35; } 50% { transform: scale(1); opacity: .9; } }
+    
+        /* ------------------------------------------------------------
+           Qt 5.15 embeds Chromium 83: flexbox gap only arrived in 84, so
+           these rows space themselves with margins instead. Harmless on
+           newer engines because the gap declarations were removed.
+           ------------------------------------------------------------ */
+        .titlebar .tb-left > * + * { margin-left: 12px; }
+        .tb-right > * + * { margin-left: 14px; }
+        .win-controls > * + * { margin-left: 4px; }
+        .amy-dock .dock-inner > * + * { margin-left: 10px; }
+        .bottom-control-bar > * + * { margin-left: 4px; }
+        #camFullBar > * + * { margin-left: 4px; }
+        .stage-bar > * + * { margin-left: 4px; }
+        .chat-input-area > * + * { margin-left: 6px; }
+        .spotify-controls > * + * { margin-left: 12px; }
+        .tb-lines > * + * { margin-left: 3px; }
     </style>
 </head>
 <body>
@@ -4503,7 +4519,7 @@ HTML_UI = r"""
     </div>
 
     <!-- APPROVAL / DIFF / PROPOSAL MODAL -->
-    <div id="modalWrap" style="position:fixed; inset:0; z-index:950; display:none;
+    <div id="modalWrap" style="position:fixed; top: 0; right: 0; bottom: 0; left: 0; z-index:950; display:none;
          background:rgba(2,6,12,0.72); backdrop-filter:blur(4px); align-items:center; justify-content:center;">
         <div style="width:min(720px,88vw); max-height:78vh; display:flex; flex-direction:column;
              background:linear-gradient(160deg,rgba(13,19,32,0.98),rgba(7,11,19,0.98));
@@ -4652,7 +4668,7 @@ HTML_UI = r"""
             </div>
             <div id="viewerTabs" style="display:flex; gap:4px; padding:6px 8px 0; overflow-x:auto; flex-shrink:0;"></div>
             <div id="viewerBody" style="flex:1; overflow:hidden; background:rgba(0,0,0,0.4); position:relative;">
-                <div id="viewerEmpty" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#64748b; font-size:11px; padding:20px; text-align:center;">
+                <div id="viewerEmpty" style="position:absolute; top: 0; right: 0; bottom: 0; left: 0; display:flex; align-items:center; justify-content:center; color:#64748b; font-size:11px; padding:20px; text-align:center;">
                     Ask Amy to show an image or open a website.
                 </div>
             </div>
@@ -5100,7 +5116,7 @@ window.amyClearSuggestion = function (id) {
             const body = document.getElementById('viewerBody');
             const pane = document.createElement('div');
             pane.id = 'pane_' + tab.id;
-            pane.style.cssText = 'position:absolute; inset:0; display:none; align-items:center; justify-content:center; overflow:auto;';
+            pane.style.cssText = 'position:absolute; top: 0; right: 0; bottom: 0; left: 0; display:none; align-items:center; justify-content:center; overflow:auto;';
             if (tab.kind === 'image') {
                 pane.innerHTML = `<img src="${escapeHtml(tab.src)}" alt="image" style="max-width:100%;max-height:100%;object-fit:contain;" onerror="this.parentNode.innerHTML='<div style=color:#f43f5e;padding:20px;font-size:11px>Image could not be loaded.</div>'">`;
             } else {
