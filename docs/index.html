@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Amy AI — Local Voice Assistant for Windows, Powered by Ollama</title>
 <meta name="description" content="Amy AI is a free, open-source local voice assistant for Windows. A JARVIS-style offline AI assistant powered by Ollama that sees your screen, controls your apps, models CAD parts and runs entirely on your own PC — no API keys, no cloud.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:locale" content="en_GB">
 <link rel="canonical" href="https://edzzztech.github.io/Amy-AI/">
 <meta name="author" content="edzzztech">
 <meta name="robots" content="index, follow, max-image-preview:large">
@@ -20,6 +24,85 @@
   "url": "https://edzzztech.github.io/Amy-AI/",
   "description": "Amy AI is a free, open-source local voice assistant for Windows, powered by Ollama.",
   "publisher": { "@type": "Person", "name": "edzzztech", "url": "https://github.com/edzzztech" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  "name": "How to set up Amy AI, a local voice assistant for Windows",
+  "description": "Install and run Amy AI, an offline voice assistant for Windows that uses local models through Ollama.",
+  "totalTime": "PT20M",
+  "tool": [
+    {
+      "@type": "HowToTool",
+      "name": "Windows 10 or 11"
+    },
+    {
+      "@type": "HowToTool",
+      "name": "Python 3.10 or newer"
+    },
+    {
+      "@type": "HowToTool",
+      "name": "Ollama"
+    }
+  ],
+  "step": [
+    {
+      "@type": "HowToStep",
+      "position": 1,
+      "name": "Clone and install",
+      "text": "Clone the repository and install the Python dependencies with pip install -r requirements.txt. CadQuery and OpenCV are imported lazily, so neither loads until you ask for CAD or the camera.",
+      "url": "https://edzzztech.github.io/Amy-AI/#start"
+    },
+    {
+      "@type": "HowToStep",
+      "position": 2,
+      "name": "Pull the local models",
+      "text": "Install Ollama, then pull a chat model, a vision model and an embedding model: llama3.2, llava and nomic-embed-text.",
+      "url": "https://edzzztech.github.io/Amy-AI/#start"
+    },
+    {
+      "@type": "HowToStep",
+      "position": 3,
+      "name": "Fill in your config",
+      "text": "Open amy_config.json and replace the placeholders. Everything is optional except the Ollama block.",
+      "url": "https://edzzztech.github.io/Amy-AI/#config"
+    },
+    {
+      "@type": "HowToStep",
+      "position": 4,
+      "name": "Run it",
+      "text": "Run python amy.py. Amy greets you on launch, then waits for the wake word.",
+      "url": "https://edzzztech.github.io/Amy-AI/#start"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": "Amy AI",
+  "description": "Source code for Amy AI, a local-first voice assistant for Windows.",
+  "codeRepository": "https://github.com/edzzztech/Amy-AI",
+  "programmingLanguage": {
+    "@type": "ComputerLanguage",
+    "name": "Python"
+  },
+  "runtimePlatform": "Python 3.10+",
+  "targetProduct": {
+    "@type": "SoftwareApplication",
+    "name": "Amy AI",
+    "operatingSystem": "Windows 10, Windows 11",
+    "applicationCategory": "DeveloperApplication"
+  },
+  "license": "https://polyformproject.org/licenses/noncommercial/1.0.0",
+  "author": {
+    "@type": "Person",
+    "name": "edzzztech",
+    "url": "https://github.com/edzzztech"
+  }
 }
 </script>
 <!-- Open Graph / social previews -->
@@ -499,6 +582,7 @@
   </div>
 </header>
 
+<main>
 <!-- ============ HERO ============ -->
 <div class="hero">
   <div class="wrap">
@@ -1088,6 +1172,8 @@ ollama pull nomic-embed-text  <span class="cm"># memory search</span></pre></div
     </div>
   </div>
 </section>
+
+</main>
 
 <footer>
   <div class="wrap foot">
