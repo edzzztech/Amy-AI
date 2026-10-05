@@ -45,7 +45,7 @@ class AppControl(private val context: Context) {
         }
         val list = found
             .mapNotNull { info ->
-                val label = info.loadLabel(pm)?.toString()?.trim().orEmpty()
+                val label = info.loadLabel(pm).toString().trim()
                 val pkg = info.activityInfo?.packageName.orEmpty()
                 if (label.isEmpty() || pkg.isEmpty()) null else App(label, pkg)
             }

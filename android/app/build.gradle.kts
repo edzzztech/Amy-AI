@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -7,12 +9,12 @@ plugins {
 
 android {
     namespace = "io.github.edzzztech.amy"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "io.github.edzzztech.amy"
         minSdk = 29          // Android 10: needed for the audio and projection APIs
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
     }
@@ -28,33 +30,44 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 
-dependencies {
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-service:2.8.7")
-    implementation("androidx.activity:activity-compose:1.9.3")
+kotlin {
+    compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+}
 
-    val compose = platform("androidx.compose:compose-bom:2024.10.01")
+dependencies {
+    // Each of these is the newest release that builds on Android Gradle
+    // Plugin 8.13. core 1.19, lifecycle 2.11 and Compose 1.12 (BOM 2026.08
+    // and later) need AGP 9 and SDK 37 — a plugin major version that also
+    // needs a matching Android Studio, so it is a separate, deliberate step.
+    implementation("androidx.core:core-ktx:1.18.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-service:2.10.0")
+    implementation("androidx.activity:activity-compose:1.13.0")
+
+    val compose = platform("androidx.compose:compose-bom:2026.06.01")
     implementation(compose)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
 
     // On-device inference. A Maven dependency rather than an NDK build
     // of llama.cpp; LlmEngine is the seam if we ever need to swap it.
+    //
+    // Held at the version proven on a real phone. A native inference engine
+    // can change behaviour that compiling cannot reveal, so it moves together
+    // with the vision model, which needs a newer one and a phone to test on.
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
 
     // Camera mode
-    val camerax = "1.4.1"
+    val camerax = "1.6.2"
     implementation("androidx.camera:camera-core:$camerax")
     implementation("androidx.camera:camera-camera2:$camerax")
     implementation("androidx.camera:camera-lifecycle:$camerax")

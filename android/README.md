@@ -83,7 +83,7 @@ Optional. Everything above works unrooted. Today root is used for one thing: ope
 
 ```
 Android Studio (Ladybug or newer), its bundled JDK 17
-minSdk 29 (Android 10), targetSdk 35
+minSdk 29 (Android 10), targetSdk 36 (Android 16)
 ```
 
 Open the `android/` folder as a project, let Gradle sync, and run on a device. The main README has the step-by-step, including where the model file goes.

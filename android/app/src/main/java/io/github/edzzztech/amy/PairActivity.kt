@@ -66,6 +66,10 @@ private fun PairScreen(onClose: () -> Unit) {
             Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
+                // Edge to edge, nothing keeps the fields clear of the keyboard
+                // or the navigation bar unless asked to.
+                .navigationBarsPadding()
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 22.dp),
         ) {
