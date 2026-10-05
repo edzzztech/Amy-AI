@@ -1,1 +1,7 @@
 * text=auto
+
+# Shell scripts keep LF even in a Windows checkout, or they fail with
+# "bad interpreter"; batch files want CRLF; jars are binary.
+android/gradlew text eol=lf
+*.bat text eol=crlf
+*.jar binary

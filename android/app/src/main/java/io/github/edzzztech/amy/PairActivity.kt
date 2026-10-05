@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.edzzztech.amy.core.Amy
@@ -73,8 +74,11 @@ private fun PairScreen(onClose: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
-                    Modifier.clip(CircleShape).clickable(onClick = onClose).padding(10.dp),
-                ) { Icon(Sym.Stop, Muted, 18.dp) }
+                    Modifier
+                        .clip(CircleShape)
+                        .clickable(role = Role.Button, onClick = onClose)
+                        .padding(10.dp),
+                ) { Icon(Sym.Close, Muted, size = 18.dp, label = "Close") }
                 Spacer(Modifier.width(6.dp))
                 Text("Pair with your computer", fontSize = 17.sp,
                     color = MaterialTheme.colorScheme.onBackground)

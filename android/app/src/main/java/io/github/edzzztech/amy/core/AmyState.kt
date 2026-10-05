@@ -33,6 +33,16 @@ object AmyState {
     /** The status to fall back to when she finishes talking or thinking. */
     fun settled(): Listening = if (_asleep.value) Listening.Muted else Listening.Idle
 
+    /**
+     * Whether one of her screens is visible. Android lets an app open other
+     * apps freely only then, or with one of a few exemptions, so "open
+     * Spotify" checks before promising anything. Kept by the application's
+     * activity callbacks.
+     */
+    @Volatile
+    var inForeground: Boolean = false
+        internal set
+
     /** The live transcript, updated as partial results arrive. */
     private val _heard = MutableStateFlow("")
     val heard: StateFlow<String> = _heard.asStateFlow()

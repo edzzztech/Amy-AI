@@ -9,8 +9,10 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.WindowManager
+import androidx.core.net.toUri
 import io.github.edzzztech.amy.core.Amy
 import io.github.edzzztech.amy.core.AmyState
+import io.github.edzzztech.amy.core.Listening
 import io.github.edzzztech.amy.ui.OrbView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,11 +45,11 @@ class OverlayService : Service() {
             return
         }
         Amy.start(this)
-        show()
-        AmyState.setOverlay(true)
+        if (show()) AmyState.setOverlay(true)
     }
 
-    private fun show() {
+    /** False if the window could not be added, in which case the service stops. */
+    private fun show(): Boolean {
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val view = OrbView(this)
         val size = (84 * resources.displayMetrics.density).toInt()
@@ -78,7 +80,7 @@ class OverlayService : Service() {
         } catch (e: Exception) {
             // The permission can be revoked between the check and here.
             stopSelf()
-            return
+            return false
         }
 
         windowManager = wm
@@ -92,6 +94,7 @@ class OverlayService : Service() {
         levelWatcher = scope.launch {
             AmyState.level.collect { lvl -> view.level = lvl }
         }
+        return true
     }
 
     /** Drag to move, tap to open, long-press to sleep or wake. */
@@ -159,12 +162,25 @@ class OverlayService : Service() {
         )
     }
 
+    /**
+     * Same rules as the mic button in the app. Talking: interrupt. Asleep:
+     * wake. Otherwise: sleep. Asleep is read from its own flag; the status
+     * reads Speaking while she says "I'll stop listening", and taking that as
+     * awake sent a second sleep instead of a wake.
+     */
     private fun toggleListening() {
-        val sleeping = AmyState.state.value == io.github.edzzztech.amy.core.Listening.Muted
-        startForegroundService(
-            Intent(this, AmyService::class.java)
-                .setAction(if (sleeping) AmyService.ACTION_LISTEN else AmyService.ACTION_SLEEP)
-        )
+        val state = AmyState.state.value
+        if (state == Listening.Speaking || state == Listening.Thinking) {
+            Amy.stopSpeaking()
+            return
+        }
+        val action = if (AmyState.asleep.value) AmyService.ACTION_LISTEN else AmyService.ACTION_SLEEP
+        try {
+            startForegroundService(Intent(this, AmyService::class.java).setAction(action))
+        } catch (e: Exception) {
+            // Refused from the background on some versions; the app can do it.
+            openApp()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -191,7 +207,7 @@ class OverlayService : Service() {
         fun permissionIntent(context: Context): Intent =
             Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                android.net.Uri.parse("package:${context.packageName}"),
+                "package:${context.packageName}".toUri(),
             )
     }
 }

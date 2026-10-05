@@ -20,6 +20,8 @@
         android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- The floating orb. Granted by the user in Settings, not by a prompt. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- "Set a timer", "wake me at 7": handed to the clock app. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
@@ -44,6 +46,7 @@
         android:name=".AmyApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -82,6 +85,17 @@
         <service
             android:name=".OverlayService"
             android:exported="false" />
+
+        <!-- After a restart: back to listening, or one tap away from it.
+             Exported because the system sends BOOT_COMPLETED; it is a
+             protected broadcast, so no other app can fake it. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Drives other apps. Works without root; root adds the rest. -->
         <service

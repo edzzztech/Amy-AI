@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -31,17 +32,21 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import io.github.edzzztech.amy.core.*
 import io.github.edzzztech.amy.ui.DriftingBackground
 import io.github.edzzztech.amy.ui.Icon
 import io.github.edzzztech.amy.ui.Orb
 import io.github.edzzztech.amy.ui.Sym
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 
 class MainActivity : ComponentActivity() {
@@ -49,8 +54,19 @@ class MainActivity : ComponentActivity() {
     private val requestMic = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) startAmy() else AmyState.setProblem("Amy needs the microphone to listen.")
+        if (granted) {
+            startAmy()
+            askForNotifications()
+        } else {
+            AmyState.setProblem("Amy needs the microphone to listen.")
+        }
     }
+
+    // Optional: she works without it, but on Android 13+ the "listening"
+    // notification is hidden and the after-restart reminder never appears.
+    private val requestNotifications = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
 
     private val pickFile = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -82,25 +98,42 @@ class MainActivity : ComponentActivity() {
             == PackageManager.PERMISSION_GRANTED
         ) {
             startAmy()
+            askForNotifications()
         } else {
             requestMic.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
-    /** Read a file and ask her about it in one step. */
+    /** After the microphone, never alongside it: two prompts at once lose one. */
+    private fun askForNotifications() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    /**
+     * Read a file and ask her about it in one step. The reading happens off
+     * the main thread: the file may be coming from a cloud drive, and waiting
+     * for it there froze the whole screen.
+     */
     private fun attach(uri: Uri) {
         val reader = Attachments(this)
-        val file = reader.read(uri)
-        if (!file.readable) {
-            AmyState.setProblem(
-                "I can't read " + file.name + ". Plain text, Markdown, CSV, JSON and " +
-                    "code are fine; PDFs and Word files need a parser I don't have yet."
-            )
-            return
+        lifecycleScope.launch {
+            val file = withContext(Dispatchers.IO) { reader.read(uri) }
+            if (!file.readable) {
+                AmyState.setProblem(
+                    "I can't read " + file.name + ". Text, Markdown, CSV, JSON, code " +
+                        "and Word documents are fine; PDFs need a parser I don't have yet."
+                )
+                return@launch
+            }
+            AmyState.setProblem(null)
+            Amy.actions.record("file", "Attached " + file.name)
+            Amy.askAboutFile(file)
         }
-        AmyState.setProblem(null)
-        Amy.actions.record("file", "Attached " + file.name)
-        Amy.submitRaw(shown = "Attached " + file.name, prompt = reader.asPrompt(file, ""))
     }
 
     /** The floating orb. Needs a permission only Settings can grant. */
@@ -119,9 +152,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** The mic button wakes or sleeps the always-on listener. */
     /**
-     * Talking: interrupt her. Asleep: wake her. Otherwise: put her to sleep.
+     * The mic button. Talking: interrupt her. Asleep: wake her. Otherwise: put
+     * her to sleep.
      * Asleep is read from its own flag, not the status, which passes through
      * Speaking and Thinking while she is asleep.
      */
@@ -281,6 +314,7 @@ private fun Home(
 
     val level by AmyState.level.collectAsState()
     val overlayOn by AmyState.overlayOn.collectAsState()
+    val asleep by AmyState.asleep.collectAsState()
 
     Box(Modifier.fillMaxSize()) {
         DriftingBackground(Modifier.fillMaxSize())
@@ -293,9 +327,9 @@ private fun Home(
                 Box(
                     Modifier
                         .clip(CircleShape)
-                        .clickable(onClick = onOpenDrawer)
+                        .clickable(role = Role.Button, onClick = onOpenDrawer)
                         .padding(10.dp),
-                ) { Icon(Sym.Menu, Muted) }
+                ) { Icon(Sym.Menu, Muted, label = "Conversations") }
                 Spacer(Modifier.width(6.dp))
                 Text("Amy", fontSize = 17.sp, color = MaterialTheme.colorScheme.onBackground)
                 Spacer(Modifier.weight(1f))
@@ -390,13 +424,18 @@ private fun Home(
                     .padding(horizontal = 10.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ToolButton(Sym.Attach, onAttach)
+                ToolButton(Sym.Attach, "Attach a file", onAttach)
                 Spacer(Modifier.width(4.dp))
-                ToolButton(Sym.Camera, onCamera)
+                ToolButton(Sym.Camera, "Camera", onCamera)
                 Spacer(Modifier.width(4.dp))
-                ToolButton(Sym.Orb, onOverlay, active = overlayOn)
+                ToolButton(
+                    Sym.Orb,
+                    if (overlayOn) "Hide the floating orb" else "Show the floating orb",
+                    onOverlay,
+                    active = overlayOn,
+                )
                 Spacer(Modifier.width(4.dp))
-                ToolButton(Sym.Menu, onPair)
+                ToolButton(Sym.Desktop, "Pair with your computer", onPair)
                 Spacer(Modifier.width(6.dp))
                 OutlinedTextField(
                     value = draft,
@@ -417,7 +456,7 @@ private fun Home(
                     ),
                 )
                 Spacer(Modifier.width(6.dp))
-                MicOrSend(hasDraft = draft.isNotBlank(), state = state) {
+                MicOrSend(hasDraft = draft.isNotBlank(), state = state, asleep = asleep) {
                     if (draft.isNotBlank()) {
                         onSend(draft); draft = ""
                     } else onMic()
@@ -526,9 +565,10 @@ private fun Bubble(turn: Turn, streaming: Boolean = false) {
  * scale is applied on the GPU after layout and costs nothing.
  */
 @Composable
-private fun MicOrSend(hasDraft: Boolean, state: Listening, onClick: () -> Unit) {
+private fun MicOrSend(hasDraft: Boolean, state: Listening, asleep: Boolean, onClick: () -> Unit) {
     val listening = state == Listening.Listening
-    val scale = if (listening) {
+    val busy = state == Listening.Speaking || state == Listening.Thinking
+    val scale = if (listening && !hasDraft) {
         val breath = rememberInfiniteTransition(label = "mic")
         breath.animateFloat(
             initialValue = 1f,
@@ -537,7 +577,16 @@ private fun MicOrSend(hasDraft: Boolean, state: Listening, onClick: () -> Unit) 
             label = "micScale",
         ).value
     } else 1f
-    val sleeping = state == Listening.Muted && !hasDraft
+    // What a tap does decides what it shows, so the button never says one
+    // thing and does another: the mic used to read "listen" while a tap put
+    // her to sleep.
+    val (sym, label) = when {
+        hasDraft -> Sym.Send to "Send"
+        busy -> Sym.Stop to "Stop"
+        asleep -> Sym.Sleep to "Wake Amy"
+        else -> Sym.Mic to "Put Amy to sleep"
+    }
+    val dim = sym == Sym.Sleep
     Box(
         Modifier
             .size(48.dp)
@@ -547,27 +596,18 @@ private fun MicOrSend(hasDraft: Boolean, state: Listening, onClick: () -> Unit) 
             }
             .clip(CircleShape)
             .background(
-                if (sleeping) MaterialTheme.colorScheme.surface
+                if (dim) MaterialTheme.colorScheme.surface
                 else MaterialTheme.colorScheme.primary
             )
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            when {
-                hasDraft -> Sym.Send
-                state == Listening.Muted -> Sym.Sleep
-                listening -> Sym.Stop
-                else -> Sym.Mic
-            },
-            if (sleeping) Muted else Color(0xFF04221D),
-            20.dp,
-        )
+        Icon(sym, if (dim) Muted else Color(0xFF04221D), size = 20.dp, label = label)
     }
 }
 
 @Composable
-private fun ToolButton(sym: Sym, onClick: () -> Unit, active: Boolean = false) {
+private fun ToolButton(sym: Sym, label: String, onClick: () -> Unit, active: Boolean = false) {
     Box(
         Modifier
             .size(42.dp)
@@ -576,9 +616,16 @@ private fun ToolButton(sym: Sym, onClick: () -> Unit, active: Boolean = false) {
                 if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
                 else MaterialTheme.colorScheme.surface
             )
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Icon(sym, if (active) MaterialTheme.colorScheme.primary else Muted, 19.dp) }
+    ) {
+        Icon(
+            sym,
+            if (active) MaterialTheme.colorScheme.primary else Muted,
+            size = 19.dp,
+            label = label,
+        )
+    }
 }
 
 /** A tappable opener, the way Gemini offers starting points. */

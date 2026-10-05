@@ -69,6 +69,25 @@ object RootShell {
             }
         }
 
+    /**
+     * Start an activity as root, which Android's limits on starting activities
+     * from the background do not apply to. [component] is a flattened name
+     * such as "com.spotify.music/.MainActivity"; anything else is refused
+     * rather than passed to a root shell.
+     */
+    suspend fun startActivity(component: String): Boolean {
+        if (!COMPONENT.matches(component) || !isAvailable()) return false
+        val result = run(
+            "am start -n '$component' -a android.intent.action.MAIN " +
+                "-c android.intent.category.LAUNCHER"
+        )
+        // Older versions of am report failure in its output with exit code 0.
+        return result.exitCode == 0 &&
+            !result.stdout.contains("Error") && !result.stderr.contains("Error")
+    }
+
+    private val COMPONENT = Regex("[A-Za-z0-9_.]+/[A-Za-z0-9_.$]+")
+
     /** Inject a tap without the accessibility route. Root only. */
     suspend fun tap(x: Int, y: Int): Boolean = run("input tap $x $y").exitCode == 0
 

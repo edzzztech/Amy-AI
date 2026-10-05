@@ -36,9 +36,10 @@ A second build that runs **on the phone**, not a remote control for the desktop 
 
 - Always listening for the wake word, with a conversation window for follow-ups
 - A local model on-device through MediaPipe, with GPU acceleration
-- Drives Android apps through the accessibility service, with optional root
-- A floating orb over other apps
-- Camera capture, file attachments, conversation history
+- Opens and drives Android apps through the accessibility service, with optional root
+- Timers, alarms, torch and volume; the time, date and battery answered from the phone
+- Reads attached text and Word documents, and sends commands to your PC once paired
+- A floating orb over other apps, camera capture, conversation history
 
 See **[android/README.md](android/README.md)** for what does and does not carry over — CAD and reading your PC's screen cannot, and it says so plainly rather than implying parity.
 

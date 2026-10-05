@@ -33,7 +33,7 @@ import android.speech.SpeechRecognizer
  * posted to it.
  */
 class WakeListener(
-    context: Context,
+    private val context: Context,
     private val onCommand: (String) -> Unit,
 ) {
 
@@ -48,9 +48,24 @@ class WakeListener(
     private val main = Handler(Looper.getMainLooper())
 
     /** When the follow-up window last opened. */
-    private var windowOpenedAt = 0L
-    private var talking = false
+    @Volatile private var windowOpenedAt = 0L
+
+    /**
+     * Whether she is talking. Set the moment the voice starts or stops, from
+     * whichever thread reports it, never inside a posted task: stop() clears
+     * pending tasks, and once cleared a "she has finished" that only lived in
+     * one left this true for good — and she never listened again.
+     */
+    @Volatile private var talking = false
     private var faults = 0
+
+    /** The next pass of the recogniser, when one is scheduled. */
+    private val listenNow = Runnable {
+        if (enabled && !talking) {
+            stt.listen()
+            main.postDelayed(watchdog, WATCHDOG_MS)
+        }
+    }
 
     private val watchdog = Runnable {
         // No result, no error, nothing: the recogniser has wedged. Replace it.
@@ -88,6 +103,7 @@ class WakeListener(
         }
         enabled = true
         faults = 0
+        ListenSetting.save(context, listening = true)
         AmyState.setAsleep(false)
         if (!talking) AmyState.setState(Listening.Idle)
         if (!talking) scheduleListen(0)
@@ -96,7 +112,8 @@ class WakeListener(
     /** Put her to sleep. The recogniser is kept, so waking makes no sound. */
     fun stop() {
         enabled = false
-        main.removeCallbacksAndMessages(null)
+        ListenSetting.save(context, listening = false)
+        cancelListening()
         stt.pause()
         AmyState.setHeard("")
         AmyState.setAsleep(true)
@@ -106,27 +123,35 @@ class WakeListener(
     /** Release the recogniser for good. Only when the service is going away. */
     fun release() {
         enabled = false
-        main.removeCallbacksAndMessages(null)
+        cancelListening()
         stt.stop()
+    }
+
+    /** Only the listening tasks: anything else posted here must still run. */
+    private fun cancelListening() {
+        main.removeCallbacks(listenNow)
+        main.removeCallbacks(watchdog)
     }
 
     // --- her own voice -------------------------------------------------------
 
     /** She has started talking: stop hearing, so she cannot hear herself. */
-    fun pauseForSpeech() = main.post {
+    fun pauseForSpeech() {
         talking = true
-        main.removeCallbacksAndMessages(null)
-        stt.pause()
-        AmyState.setHeard("")
+        main.post {
+            cancelListening()
+            stt.pause()
+            AmyState.setHeard("")
+        }
     }
 
     /** She has finished: open the follow-up window and listen again. */
-    fun resumeAfterSpeech() = main.post {
+    fun resumeAfterSpeech() {
         talking = false
         windowOpenedAt = System.currentTimeMillis()
         // A short pause lets the end of her voice die away before listening,
         // or the recogniser catches the tail of her last word.
-        scheduleListen(AFTER_SPEECH_MS)
+        main.post { scheduleListen(AFTER_SPEECH_MS) }
     }
 
     // --- recognition ---------------------------------------------------------
@@ -196,13 +221,8 @@ class WakeListener(
 
     private fun scheduleListen(delayMs: Long) {
         if (!enabled || talking) return
-        main.removeCallbacksAndMessages(null)
-        main.postDelayed({
-            if (enabled && !talking) {
-                stt.listen()
-                main.postDelayed(watchdog, WATCHDOG_MS)
-            }
-        }, delayMs)
+        cancelListening()
+        main.postDelayed(listenNow, delayMs)
     }
 
     companion object {

@@ -68,11 +68,33 @@ class MediaPipeLlm(context: Context) : LlmEngine {
     /** Where to tell the user to put it. */
     fun expectedPath(): String = modelDir()?.absolutePath ?: "the app's files directory"
 
+    /**
+     * The model file that last failed to load, by path, size and date, and
+     * when. Every attempt tries six configurations and can take many seconds,
+     * so a file that cannot load is not retried on every message: only once
+     * it is replaced, or after a while in case memory was the problem.
+     */
+    @Volatile private var failedKey: String? = null
+    @Volatile private var failedAt = 0L
+
+    private fun keyOf(file: File) = "${file.absolutePath}|${file.length()}|${file.lastModified()}"
+
     /** Load the newest model if nothing is loaded yet. Safe to call repeatedly. */
     suspend fun ensureLoaded(): Boolean {
         if (engine != null) return true
         val file = findModel() ?: return false
-        return load(file.absolutePath)
+        val key = keyOf(file)
+        if (key == failedKey && System.currentTimeMillis() - failedAt < RETRY_FAILED_MS) {
+            return false
+        }
+        val ok = load(file.absolutePath)
+        if (ok) {
+            failedKey = null
+        } else {
+            failedKey = key
+            failedAt = System.currentTimeMillis()
+        }
+        return ok
     }
 
     override suspend fun load(modelPath: String): Boolean = busy.withPermit {
@@ -194,10 +216,8 @@ class MediaPipeLlm(context: Context) : LlmEngine {
      * turns are.
      */
     private fun chatPrompt(prompt: String, system: String?): String {
-        val budgetChars = ((maxTokens.takeIf { it > 0 } ?: TOKEN_BUDGETS.last()) - REPLY_RESERVE)
-            .coerceAtLeast(128) * CHARS_PER_TOKEN
         val sys = system?.trim().orEmpty()
-        val room = (budgetChars - sys.length).coerceAtLeast(400)
+        val room = promptRoom(sys)
         val body = prompt.trim().let { if (it.length > room) "…" + it.takeLast(room) else it }
         return buildString {
             append("<start_of_turn>user\n")
@@ -205,6 +225,17 @@ class MediaPipeLlm(context: Context) : LlmEngine {
             append(body)
             append("<end_of_turn>\n<start_of_turn>model\n")
         }
+    }
+
+    /**
+     * Characters of prompt that fit beside [system] in the loaded engine's
+     * budget. Anything longer is cut from the front, so a caller with a long
+     * document sizes it with this first and keeps the part that matters.
+     */
+    fun promptRoom(system: String?): Int {
+        val budgetChars = ((maxTokens.takeIf { it > 0 } ?: TOKEN_BUDGETS.last()) - REPLY_RESERVE)
+            .coerceAtLeast(128) * CHARS_PER_TOKEN
+        return (budgetChars - (system?.trim()?.length ?: 0)).coerceAtLeast(400)
     }
 
     private fun options(file: File, tokens: Int, gpu: Boolean) =
@@ -229,7 +260,6 @@ class MediaPipeLlm(context: Context) : LlmEngine {
 
         private const val WAIT_FOR_ENGINE_MS = 45_000L
 
-        /** Characters of prompt that comfortably fit the smallest budget. */
-        const val SAFE_PROMPT_CHARS = (1280 - REPLY_RESERVE) * CHARS_PER_TOKEN
+        private const val RETRY_FAILED_MS = 10 * 60_000L
     }
 }

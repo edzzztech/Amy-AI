@@ -1,5 +1,6 @@
 package io.github.edzzztech.amy.core
 
+import android.annotation.SuppressLint
 import android.content.Context
 import io.github.edzzztech.amy.automation.Commands
 import kotlinx.coroutines.CoroutineScope
@@ -7,6 +8,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * The brain, owned by neither the activity nor the service.
@@ -30,12 +34,16 @@ object Amy {
     private val brain = Dispatchers.IO.limitedParallelism(1)
     private val scope = CoroutineScope(SupervisorJob() + brain)
 
+    // Lint cannot tell these hold only the application context, which lives
+    // as long as the process does and so cannot leak.
     lateinit var actions: ActionLog
         private set
     lateinit var conversations: Conversations
         private set
+    @SuppressLint("StaticFieldLeak")
     lateinit var commands: Commands
         private set
+    @SuppressLint("StaticFieldLeak")
     lateinit var llm: MediaPipeLlm
         private set
     lateinit var desktop: DesktopLink
@@ -113,25 +121,30 @@ object Amy {
             deliver(reply, spoken)
             return
         }
-        converse(withHistory(clean), spoken)
+        converse(spoken) { withHistory(clean) }
     }
 
     /**
-     * Submit where what the model sees and what the conversation shows differ —
-     * an attached file, where the prompt carries the document but the transcript
-     * only shows its name. Never routed through [Commands]: a file is data, and
-     * matching its contents as instructions would let a document act.
+     * Ask about an attached file. The transcript shows only its name; the
+     * model sees the document, cut to fit what the loaded model can take.
+     * Never routed through [Commands]: a file is data, and matching its
+     * contents as instructions would let a document act.
      */
-    fun submitRaw(shown: String, prompt: String) {
+    fun askAboutFile(file: Attachments.Attached, question: String = "") {
         AmyState.setState(Listening.Thinking)
         scope.launch {
-            conversations.append("you", shown)
+            conversations.append("you", "Attached " + file.name)
             AmyState.setTurns(conversations.turns())
-            converse(prompt, spoken = false)
+            converse(spoken = false) { room -> Attachments.prompt(file, question, room) }
         }
     }
 
-    private suspend fun converse(prompt: String, spoken: Boolean) {
+    /**
+     * Load the model if need be, then stream a reply. [prompt] is built only
+     * once the model is loaded, from the room it actually has, so long input
+     * can be sized to fit instead of being cut blindly.
+     */
+    private suspend fun converse(spoken: Boolean, prompt: (room: Int) -> String) {
         if (!llm.ensureLoaded()) {
             val message = if (llm.findModel() == null) {
                 "I have no model yet. Put a .task model in ${llm.expectedPath()}."
@@ -148,8 +161,9 @@ object Amy {
         val turn = tts?.turn ?: 0
         val buffer = SentenceBuffer()
         val whole = StringBuilder()
+        val system = systemPrompt()
         try {
-            llm.generate(prompt, system = SYSTEM_PROMPT).collect { token ->
+            llm.generate(prompt(llm.promptRoom(system)), system = system).collect { token ->
                 if (tts?.turn != turn) {
                     llm.cancel()            // interrupted: stop forwarding text
                     return@collect
@@ -187,6 +201,13 @@ object Amy {
         val rest = text.substring(m.range.last + 1).trim(' ', ',', ':')
         return rest.ifBlank { null }
     }
+
+    /**
+     * The standing instructions, with today's date and time. A model has no
+     * clock; without this, "how many days until Friday?" is a guess.
+     */
+    private fun systemPrompt(): String =
+        SYSTEM_PROMPT + " It is now " + LocalDateTime.now().format(PROMPT_CLOCK) + "."
 
     /**
      * Remove control tokens the model sometimes emits verbatim. Spoken aloud,
@@ -253,6 +274,10 @@ object Amy {
 
     private const val HISTORY_TURNS = 6
     private const val HISTORY_CHARS = 300
+
+    // English on purpose: the model reads it, and it was trained in English.
+    private val PROMPT_CLOCK: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm", Locale.ENGLISH)
 
     // Doubled backslash: in a Kotlin string "\b" is a backspace character, not
     // a word boundary, so the single-backslash version could never match.

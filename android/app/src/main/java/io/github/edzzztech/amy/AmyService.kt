@@ -4,9 +4,11 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import androidx.lifecycle.LifecycleService
 import io.github.edzzztech.amy.core.Amy
+import io.github.edzzztech.amy.core.ListenSetting
 import io.github.edzzztech.amy.core.WakeListener
 
 /**
@@ -24,13 +26,27 @@ class AmyService : LifecycleService() {
         super.onCreate()
         Amy.start(this)
 
-        // minSdk is 29, so the typed overload is always available; Android 14+
-        // requires the type at start time as well as in the manifest.
-        startForeground(
-            NOTIFICATION_ID,
-            buildNotification("Listening for “Amy”"),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
-        )
+        // Android 14+ requires the type at start time as well as in the manifest.
+        try {
+            val notice = buildNotification("Listening for “Amy”")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                startForeground(NOTIFICATION_ID, notice, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } else {
+                // Android 10 has no microphone type; the manifest covers it.
+                startForeground(NOTIFICATION_ID, notice)
+            }
+        } catch (e: Exception) {
+            // Android refuses a microphone service started from the
+            // background — a restart after being killed, on recent versions.
+            // Uncaught, that crashed the app every time Android retried.
+            // Leave a one-tap way back instead.
+            Amy.actions.record("system", "Not allowed to listen in the background",
+                outcome = "failed", detail = e.message)
+            ResumeNotice.post(this)
+            stopSelf()
+            return
+        }
+        ResumeNotice.clear(this)
 
         val wake = WakeListener(this) { heard -> onHeard(heard) }
         listener = wake
@@ -38,9 +54,11 @@ class AmyService : LifecycleService() {
         Amy.onTalkingChanged = { talking ->
             if (talking) wake.pauseForSpeech() else wake.resumeAfterSpeech()
         }
-        wake.start()
+        // Put to sleep before the service was last stopped? Then stay asleep.
+        val listening = ListenSetting.wanted(this)
+        if (listening) wake.start() else wake.stop()
         Amy.warmUp()        // load the model now, not on the first question
-        Amy.actions.record("system", "Listening started")
+        Amy.actions.record("system", if (listening) "Listening started" else "Started asleep")
     }
 
     private fun onHeard(heard: String) {

@@ -6,15 +6,15 @@ import kotlinx.coroutines.flow.Flow
  * What the rest of the app talks to, so the model backend can change without
  * touching anything else.
  *
- * The first implementation will wrap llama.cpp through JNI. A phone realistically
- * runs a 1–3B parameter model; the desktop's larger models stay on the desktop,
- * and the phone can hand work over when the two are on the same network.
+ * Implemented by [MediaPipeLlm]. A phone realistically runs a 1–3B parameter
+ * model; the desktop's larger models stay on the desktop, and the phone can
+ * hand work over when the two are on the same network.
  */
 interface LlmEngine {
 
     val isLoaded: Boolean
 
-    /** Load a GGUF from local storage. Returns false rather than throwing. */
+    /** Load a model file from local storage. Returns false rather than throwing. */
     suspend fun load(modelPath: String): Boolean
 
     /**
@@ -83,10 +83,9 @@ class SentenceBuffer {
     private companion object {
         const val MIN_FIRST_CHUNK = 11
 
-        // Built with Regex(String) so the pattern is a plain Kotlin string:
-        // a raw string ("""...""") would treat $ as a template, and a normal
-        // string needs every backslash doubled. Spelling the escapes out as
-        // unicode keeps both the compiler and the regex engine happy.
+        // A plain string with every backslash doubled: in a raw string
+        // ("""...""") the $ that joins these patterns is awkward to write, and
+        // a single backslash in a plain one is a Kotlin escape, not a regex one.
         private const val WS_OR_END = "([ \\t\\n\\r]|\\z)"
         val SENTENCE_END = Regex("[.!?]$WS_OR_END")
         val CLAUSE_END = Regex("[,;:.!?]$WS_OR_END")

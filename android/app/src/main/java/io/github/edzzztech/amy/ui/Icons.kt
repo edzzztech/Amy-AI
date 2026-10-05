@@ -10,6 +10,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -18,13 +20,23 @@ import androidx.compose.ui.unit.dp
  *
  * Not emoji — those ignore the theme and render differently on every device —
  * and not a Material icon dependency, which would pull in thousands of vectors
- * to use six. Each one is a few strokes that inherit the colour they are given.
+ * to use ten. Each one is a few strokes that inherit the colour they are given.
+ *
+ * Give an icon that is a button's only content a [label]. A drawing has no
+ * text, so without one a screen reader announces the button as "unlabelled".
  */
-enum class Sym { Attach, Camera, Orb, Mic, Send, Stop, Menu, Sleep }
+enum class Sym { Attach, Camera, Orb, Mic, Send, Stop, Menu, Sleep, Close, Desktop }
 
 @Composable
-fun Icon(sym: Sym, tint: Color, size: Dp = 20.dp, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(size)) {
+fun Icon(
+    sym: Sym,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    size: Dp = 20.dp,
+    label: String? = null,
+) {
+    val described = if (label == null) modifier else modifier.semantics { contentDescription = label }
+    Canvas(modifier = described.size(size)) {
         val u = this.size.minDimension / 24f          // one grid unit
         val stroke = Stroke(
             width = 1.7f * u,
@@ -131,6 +143,29 @@ fun Icon(sym: Sym, tint: Color, size: Dp = 20.dp, modifier: Modifier = Modifier)
                     close()
                 }
                 drawPath(moon, tint, style = stroke)
+            }
+
+            Sym.Close -> {
+                drawLine(tint, Offset(6.5f * u, 6.5f * u), Offset(17.5f * u, 17.5f * u),
+                    strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(tint, Offset(17.5f * u, 6.5f * u), Offset(6.5f * u, 17.5f * u),
+                    strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+
+            Sym.Desktop -> {
+                // A monitor on a stand: the computer she can pair with.
+                val screen = Path().apply {
+                    moveTo(3.5f * u, 5f * u)
+                    lineTo(20.5f * u, 5f * u)
+                    lineTo(20.5f * u, 15.5f * u)
+                    lineTo(3.5f * u, 15.5f * u)
+                    close()
+                }
+                drawPath(screen, tint, style = stroke)
+                drawLine(tint, Offset(12f * u, 15.5f * u), Offset(12f * u, 19f * u),
+                    strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(tint, Offset(8f * u, 19.5f * u), Offset(16f * u, 19.5f * u),
+                    strokeWidth = stroke.width, cap = StrokeCap.Round)
             }
         }
     }

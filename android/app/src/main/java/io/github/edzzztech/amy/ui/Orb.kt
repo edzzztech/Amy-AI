@@ -36,8 +36,8 @@ private val MutedShade = Color(0xFF383C4A)
 @Composable
 fun Orb(
     state: Listening,
-    level: Float = 0f,
     modifier: Modifier = Modifier,
+    level: Float = 0f,
 ) {
     val clock = rememberInfiniteTransition(label = "orb")
 

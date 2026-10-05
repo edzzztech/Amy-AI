@@ -1202,6 +1202,14 @@ ollama pull nomic-embed-text  <span class="cm"># memory search</span></pre></div
         <h3>A floating orb</h3>
         <p>The same mark hovering over everything else. Drag it anywhere, tap to open her, long-press to put her to sleep.</p>
       </div>
+      <div class="card">
+        <h3>Phone controls</h3>
+        <p>Timers, alarms, the torch and media volume. The time, the date and the battery are read from the phone, not guessed by the model.</p>
+      </div>
+      <div class="card">
+        <h3>Your files and your PC</h3>
+        <p>Attach a text or Word document and ask about it. Pair with Amy on your computer, then say &ldquo;on my PC&hellip;&rdquo; to send it a command over your own network.</p>
+      </div>
     </div>
 
     <div class="sec-head" style="margin-top:56px">
@@ -1229,13 +1237,13 @@ ollama pull nomic-embed-text  <span class="cm"># memory search</span></pre></div
 
       <div class="step">
         <div class="step-top"><span class="step-n"></span><h3>Grant what she needs</h3></div>
-        <p>Allow the <strong>microphone</strong> and <strong>notifications</strong> when asked. For app control, turn on <em>Settings &rarr; Accessibility &rarr; Amy</em>. Set her battery usage to <strong>Unrestricted</strong>, or Android will quietly kill the listening service after a while.</p>
+        <p>Allow the <strong>microphone</strong> and <strong>notifications</strong> when asked. For app control, turn on <em>Settings &rarr; Accessibility &rarr; Amy</em> &mdash; Android only lets an app open other apps from the background with that, or <strong>Display over other apps</strong>, switched on. Set her battery usage to <strong>Unrestricted</strong>, or Android will quietly kill the listening service after a while.</p>
       </div>
     </div>
 
     <div class="pipe-note" style="margin-top:34px">
       <div><strong>Not a port</strong>CAD, reading your PC&rsquo;s screen and Windows automation can&rsquo;t cross over. A phone runs a 1&ndash;3B model against your desktop&rsquo;s larger ones, so expect it to be quicker but less capable.</div>
-      <div><strong>Still local</strong>Speech, inference and memory all stay on the handset. The two devices sync by pairing, with no account and no server in between.</div>
+      <div><strong>Still local</strong>The model and your conversations stay on the handset; speech goes through your phone&rsquo;s own recogniser, asked to work offline. Pairing with the PC needs no account and no server in between.</div>
       <div><strong>Android 10 or newer</strong>Built against API&nbsp;35. Any reasonably recent phone will do; more RAM means you can run a larger model.</div>
     </div>
   </div>

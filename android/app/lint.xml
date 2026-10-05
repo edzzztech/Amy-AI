@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Lint suggests moving the launcher icons from mipmap-anydpi-v26 to
+         mipmap-anydpi, since minSdk is 29. Doing that makes resource linking
+         fail ("resource mipmap/ic_launcher not found"), even from a clean
+         build, so the folder keeps its qualifier. -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+</lint>

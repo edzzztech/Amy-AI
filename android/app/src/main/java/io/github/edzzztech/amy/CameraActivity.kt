@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -25,17 +26,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import io.github.edzzztech.amy.core.Amy
+import io.github.edzzztech.amy.ui.Icon
+import io.github.edzzztech.amy.ui.Sym
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 /**
  * Camera mode: the phone's version of the desktop's desk view.
@@ -50,23 +54,30 @@ class CameraActivity : ComponentActivity() {
 
     private var capture: ImageCapture? = null
 
+    /**
+     * Whether the camera may be used. State, so that granting permission on
+     * first use binds the camera: before, the preview had already tried and
+     * failed while the prompt was up, and stayed black after "Allow".
+     */
+    private var allowed by mutableStateOf(false)
+
     private val requestCamera = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted -> if (!granted) finish() }
+    ) { granted -> if (granted) allowed = true else finish() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Amy.start(this)
+        enableEdgeToEdge()
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestCamera.launch(Manifest.permission.CAMERA)
-        }
+        allowed = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!allowed) requestCamera.launch(Manifest.permission.CAMERA)
 
         setContent {
             AmyTheme {
                 CameraScreen(
+                    allowed = allowed,
                     onBind = { view, lensFacing -> bind(view, lensFacing) },
                     onShutter = ::takePhoto,
                     onClose = { finish() },
@@ -103,7 +114,7 @@ class CameraActivity : ComponentActivity() {
     private fun takePhoto() {
         val imageCapture = capture ?: return
         val dir = File(getExternalFilesDir(null), "photos").apply { mkdirs() }
-        val name = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.UK).format(Date())
+        val name = LocalDateTime.now().format(PHOTO_NAME)
         val file = File(dir, "$name.jpg")
 
         imageCapture.takePicture(
@@ -130,6 +141,8 @@ class CameraActivity : ComponentActivity() {
     }
 
     companion object {
+        private val PHOTO_NAME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+
         fun open(context: Context) {
             context.startActivity(Intent(context, CameraActivity::class.java))
         }
@@ -138,11 +151,11 @@ class CameraActivity : ComponentActivity() {
 
 @Composable
 private fun CameraScreen(
+    allowed: Boolean,
     onBind: (PreviewView, Int) -> Unit,
     onShutter: () -> Unit,
     onClose: () -> Unit,
 ) {
-    val context = LocalContext.current
     var front by remember { mutableStateOf(false) }
     val lens = if (front) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
 
@@ -160,24 +173,22 @@ private fun CameraScreen(
                 }
             },
         )
-        LaunchedEffect(preview, lens) {
-            preview?.let { onBind(it, lens) }
+        LaunchedEffect(preview, lens, allowed) {
+            if (allowed) preview?.let { onBind(it, lens) }
         }
 
-        // Top bar: close, and the name of the active lens.
+        // Top bar: close, and the name of the active lens. Clear of the
+        // status bar: from Android 15 every screen runs edge to edge.
         Row(
-            Modifier.fillMaxWidth().padding(16.dp),
+            Modifier.fillMaxWidth().statusBarsPadding().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                "✕",
-                fontSize = 20.sp,
-                color = Color.White,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onClose)
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            )
+            Box(
+                Modifier
+                    .clip(CircleShape)
+                    .clickable(role = Role.Button, onClick = onClose)
+                    .padding(10.dp),
+            ) { Icon(Sym.Close, Color.White, size = 20.dp, label = "Close camera") }
             Spacer(Modifier.weight(1f))
             Text(
                 if (front) "FRONT" else "REAR",
@@ -186,13 +197,18 @@ private fun CameraScreen(
                 color = Color(0xFF5EEAD4),
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .clickable { front = !front }
+                    .clickable(onClickLabel = "Switch camera", role = Role.Button) {
+                        front = !front
+                    }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             )
         }
 
         Column(
-            Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
+            Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 40.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
@@ -207,7 +223,9 @@ private fun CameraScreen(
                     .size(72.dp)
                     .clip(CircleShape)
                     .background(Color.White)
-                    .clickable(onClick = onShutter)
+                    .clickable(onClickLabel = "Take a photo", role = Role.Button,
+                        onClick = onShutter)
+                    .semantics { contentDescription = "Shutter" }
             )
         }
     }
