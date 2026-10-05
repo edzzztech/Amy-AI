@@ -65,7 +65,7 @@ class SentenceBuffer {
     }
 
     private fun firstSentence(): Int {
-        val m = Regex("[.!?](\s|$)").find(buffer)
+        val m = SENTENCE_END.find(buffer)
         return m?.range?.last?.plus(1) ?: -1
     }
 
@@ -73,7 +73,7 @@ class SentenceBuffer {
         // Skip boundaries too short to be worth speaking, and keep looking.
         // Returning -1 on the first short one stalls forever: the same match
         // is found again on every token, so nothing is ever flushed.
-        for (m in Regex("[,;:.!?](\s|$)").findAll(buffer)) {
+        for (m in CLAUSE_END.findAll(buffer)) {
             val end = m.range.last + 1
             if (end > MIN_FIRST_CHUNK) return end
         }
@@ -82,5 +82,13 @@ class SentenceBuffer {
 
     private companion object {
         const val MIN_FIRST_CHUNK = 11
+
+        // Built with Regex(String) so the pattern is a plain Kotlin string:
+        // a raw string ("""...""") would treat $ as a template, and a normal
+        // string needs every backslash doubled. Spelling the escapes out as
+        // unicode keeps both the compiler and the regex engine happy.
+        private const val WS_OR_END = "([ \\t\\n\\r]|\\z)"
+        val SENTENCE_END = Regex("[.!?]$WS_OR_END")
+        val CLAUSE_END = Regex("[,;:.!?]$WS_OR_END")
     }
 }
