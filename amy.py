@@ -937,7 +937,11 @@ DEFAULT_CONFIG = {
         "max_continuations": 2,
     },
     "camera": {
-        "device_index": 0,
+        "device_index": 0,       # legacy single-camera setting, still honoured
+        # Several cameras, each with a name you can say. "active" holds the
+        # name of the one in use; "amy, scan for cameras" fills this in.
+        "devices": [{"name": "Desk", "index": 0}],
+        "active": "Desk",
         "stream_fps": 12,
         "capture_width": 1280,
         "capture_height": 720,
@@ -4137,78 +4141,140 @@ HTML_UI = r"""
         .reactor-container.active-speech .core-center,
         .reactor-container.convo-mode .core-center {
             position: relative; width: auto; height: auto; background: none; border: none;
-            box-shadow: none; transform: none; color: #fff; display: flex; flex-direction: column;
-            align-items: center; gap: 6px; }
-        /* Display type matches the site's hero: tight, not tracked-out. */
-        .orb-name { font-size: 46px; font-weight: 600; letter-spacing: -0.02em; color: var(--text); line-height: 1; }
+            box-shadow: none; color: #fff; display: flex; flex-direction: column;
+            align-items: center; gap: 6px;
+            /* The sphere is the mark; the name sits under it as a caption. */
+            transform: translateY(132px); }
+        /* The sphere is the logo — no wordmark under it. */
+        .orb-name { display: none; }
         .orb-state { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
             color: var(--text-dim); min-height: 14px; max-width: 200px; text-align: center;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .reactor-container.docked { width: 150px; height: 150px; opacity: 0.85; mix-blend-mode: normal; filter: none; }
-        .reactor-container.docked .orb-name { font-size: 20px; }
+        .reactor-container.docked .core-center { transform: translateY(56px); }
         .reactor-container.docked .orb-state { display: none; }
 
-        /* Glass panels */
+        /* Panels: a solid card with a brand hairline along the top edge,
+           not a floating pane of glass. Content legibility over transparency. */
         .widget, .jarvis-inapp-card, .amy-inapp-card, .stage-panel {
-            background: var(--glass); border: 1px solid var(--border); border-radius: 14px;
-            backdrop-filter: blur(24px) saturate(140%); box-shadow: 0 18px 50px rgba(0,0,0,0.45); }
-        .widget::before, .widget::after { display: none; }
-        .widget:hover { border-color: var(--border-lit); box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
-        .widget:focus-within { border-color: rgba(94,234,212,0.35); }
-        .widget-header { color: var(--text); text-shadow: none; background: transparent;
-            letter-spacing: 0.06em; font-weight: 600; font-size: 11px; border-bottom: 1px solid var(--border);
-            text-transform: none; padding: 12px 16px; }
+            background: rgba(14, 16, 23, 0.94); border: 1px solid var(--border);
+            border-radius: 16px; overflow: hidden;
+            backdrop-filter: blur(20px) saturate(130%);
+            box-shadow: 0 24px 60px -12px rgba(0,0,0,0.7);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease; }
+        /* The one flash of brand on each panel: a 2px teal-to-violet edge. */
+        .widget::before, .jarvis-inapp-card::before, .amy-inapp-card::before {
+            content: ''; display: block; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(100deg, var(--accent), var(--accent-2));
+            opacity: 0.85; pointer-events: none; z-index: 3; border: none; border-radius: 0; }
+        .widget::after { display: none; }
+        .widget:hover { border-color: var(--border-lit); box-shadow: 0 28px 68px -12px rgba(0,0,0,0.75); }
+        .jarvis-inapp-card:hover, .amy-inapp-card:hover {
+            border-color: var(--border-lit); transform: translateY(-2px); }
+        .widget:focus-within { border-color: var(--accent-soft); }
+        /* Header: no divider rule, just air. The eyebrow carries the type. */
+        .widget-header { color: var(--text-dim); text-shadow: none; background: transparent;
+            letter-spacing: 0.14em; font-weight: 500; font-size: 10px; text-transform: uppercase;
+            font-family: var(--mono-font); border-bottom: none; padding: 16px 18px 10px; }
         .widget-header .status-dot, .status-dot { width: 6px; height: 6px; box-shadow: none; animation: none; background: var(--accent); }
-        .close-widget-btn { color: var(--text-dim); font-weight: 400; }
+        .close-widget-btn { color: var(--text-dim); font-weight: 400; transition: color 0.18s ease; }
         .close-widget-btn:hover { color: var(--text); }
-        .resize-grip { background: none; border-right: 2px solid var(--border-lit); border-bottom: 2px solid var(--border-lit);
-            width: 10px; height: 10px; right: 6px; bottom: 6px; border-bottom-right-radius: 3px; }
-        .chat-messages { color: #c3c8d6; font-size: 13px; }
+        .resize-grip { background: none; border-right: 2px solid var(--border); border-bottom: 2px solid var(--border);
+            width: 10px; height: 10px; right: 7px; bottom: 7px; border-bottom-right-radius: 3px; }
+        .chat-messages { color: #c3c8d6; font-size: 13px; line-height: 1.65; }
         .chat-input-area { background: rgba(0,0,0,0.18); border-top: 1px solid var(--border); }
         .chat-input-area input, .stage-input, .scratchpad-area, #todoInput, #docEditInstruction {
-            background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text); border-radius: 10px; }
-        .chat-input-area input:focus, .scratchpad-area:focus { border-color: rgba(94,234,212,0.5); }
-        .chat-input-area button { background: var(--accent); color: #04221d; border-radius: 10px; letter-spacing: 0.04em; }
-        .chat-input-area button:hover { box-shadow: none; filter: brightness(1.08); }
-        .action-btn { background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--border);
-            border-radius: 9px; letter-spacing: 0.03em; font-weight: 600; }
-        .action-btn:hover { background: rgba(94,234,212,0.16); color: #fff; box-shadow: none; }
-        .card-type-badge { background: rgba(255,255,255,0.06); color: var(--text-dim); border: 1px solid var(--border); }
-        .card-title-text { color: var(--text); letter-spacing: 0.02em; font-size: 12px; }
-        .card-body-content { font-size: 12.5px; color: #c3c8d6; }
+            background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text);
+            border-radius: 10px; transition: border-color 0.18s ease; }
+        .chat-input-area input:focus, .stage-input:focus, .scratchpad-area:focus,
+        #todoInput:focus, #docEditInstruction:focus { border-color: var(--accent-soft); outline: none; }
+        /* One primary button per panel, same as the site's .btn-primary. */
+        .chat-input-area button { background: var(--accent); color: #04221d; border-radius: 10px;
+            font-weight: 580; letter-spacing: 0; border: none;
+            box-shadow: 0 6px 24px -8px var(--accent); transition: box-shadow 0.2s ease, filter 0.2s ease; }
+        .chat-input-area button:hover { box-shadow: 0 10px 30px -8px var(--accent); filter: brightness(1.06); }
+        /* Everything else is the ghost button: hairline, neutral, quiet. */
+        .action-btn { background: transparent; color: var(--text); border: 1px solid var(--border-lit);
+            border-radius: 10px; letter-spacing: 0; font-weight: 580; text-transform: none;
+            transition: background 0.2s ease, border-color 0.2s ease; }
+        .action-btn:hover { background: rgba(255,255,255,0.06); color: var(--text);
+            border-color: var(--border-lit); box-shadow: none; }
+        /* Badges are the site's chips: mono, pill, muted. */
+        .card-type-badge { background: var(--surface-2); color: var(--text-dim);
+            border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px;
+            font-family: var(--mono-font); font-size: 9.5px; letter-spacing: 0.04em; text-transform: lowercase; }
+        .card-title-text { color: var(--text); letter-spacing: -0.01em; font-size: 13px; font-weight: 620; }
+        .card-body-content { font-size: 12.5px; color: #c3c8d6; line-height: 1.65; }
+        .card-body-content pre { background: var(--surface-2); border: 1px solid var(--border);
+            border-radius: 10px; padding: 12px 14px; }
         .telemetry-fill { background: var(--accent); box-shadow: none; }
-        .todo-item { background: rgba(255,255,255,0.03); border: 1px solid var(--border); }
+        .todo-item { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; }
         .watermark { display: none; }
 
         /* Fullscreen stages: dark glass, no HUD brackets or scanlines */
         .stage { background: rgba(7,8,12,0.88); backdrop-filter: blur(18px); }
         .stage-hud .brk, .cam-hud .brk { display: none; }
+        /* Camera label reads as the site's eyebrow, and names the active device. */
         .stage-title, .cam-hud .label { color: var(--text); text-shadow: none; letter-spacing: 0.12em; font-weight: 600; }
-        .stage-close { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-dim); }
-        .stage-bar, #camFullBar { background: var(--glass-strong); border: 1px solid var(--border); bottom: 92px; }
+        .cam-hud .label { font-family: var(--mono-font); font-size: 11px; letter-spacing: 0.16em;
+            text-transform: uppercase; color: var(--text-dim); background: var(--glass-strong);
+            border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; }
+        .cam-hud .rec { font-family: var(--mono-font); font-size: 10px; letter-spacing: 0.16em;
+            color: var(--accent); text-shadow: none; }
+        .stage-close { background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+            color: var(--text-dim); border-radius: 10px; }
+        .stage-close:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+        /* Camera + stage bars use the dock's surface so every bar matches. */
+        /* Clears the dock (22px up, ~60px tall) instead of sitting under it.
+           width:max-content is load-bearing: absolutely positioned at left:50%,
+           shrink-to-fit only offers half the window, so the bar wrapped early. */
+        .stage-bar, #camFullBar { background: var(--glass-strong); border: 1px solid var(--border);
+            bottom: 104px; border-radius: 16px; padding: 10px 12px; gap: 4px; flex-wrap: wrap;
+            width: max-content; max-width: 92vw; justify-content: center;
+            backdrop-filter: blur(24px) saturate(140%); box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+            display: flex; align-items: center; }
+        /* The camera picker: a quiet select that matches the ghost buttons. */
+        .cam-picker { background: rgba(255,255,255,0.04); color: var(--text);
+            border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px;
+            font-family: var(--ui-font); font-size: 12.5px; min-width: 132px; max-width: 200px;
+            cursor: pointer; outline: none; transition: border-color 0.18s ease; }
+        .cam-picker:hover, .cam-picker:focus { border-color: var(--border-lit); }
+        .cam-picker option { background: var(--panel-solid); color: var(--text); }
         .stage-body { bottom: 150px; }
         #camFullscreen::after { background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.55) 100%); }
 
-        /* Dock: the trapezoid tab from the design, with mic + ask field */
-        .amy-dock { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
-            z-index: 1000; pointer-events: auto; padding: 14px 64px 16px; min-width: 620px; }
-        .amy-dock .dock-shape { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-        .amy-dock .dock-shape path.fill { fill: rgba(14,16,23,0.72); }
-        .amy-dock .dock-shape path.edge { fill: none; stroke: #e8eaf2; stroke-opacity: 0.85; stroke-width: 2; }
+        /* Dock: a floating command bar on the site's surface recipe —
+           glass panel, hairline border, soft shadow. No trapezoid, no bright edge. */
+        .amy-dock { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
+            z-index: 1000; pointer-events: auto; padding: 10px 12px;
+            min-width: min(620px, 92vw); max-width: 92vw;
+            background: var(--glass-strong); border: 1px solid var(--border); border-radius: 16px;
+            backdrop-filter: blur(24px) saturate(140%);
+            box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+        .amy-dock:focus-within { border-color: var(--border-lit); box-shadow: 0 20px 56px rgba(0,0,0,0.55); }
+        .amy-dock .dock-shape { display: none; }
         .amy-dock .dock-inner { position: relative; display: flex; align-items: center; gap: 10px; }
         .dock-ask { flex: 1; min-width: 220px; background: transparent; border: none; outline: none;
-            color: var(--text); font-size: 14px; padding: 10px 6px; caret-color: #e8eaf2; }
+            color: var(--text); font-size: 14px; padding: 10px 4px; caret-color: var(--accent); }
         .dock-ask::placeholder { color: var(--text-dim); }
         .bottom-control-bar { position: static; transform: none; background: none; border: none;
             box-shadow: none; padding: 0; gap: 4px; backdrop-filter: none; }
-        .hud-btn { width: 36px; height: 36px; border-radius: 10px; background: transparent; border: none; color: #cfd8dc; }
-        .hud-btn:hover { background: rgba(255,255,255,0.08); color: #fff; box-shadow: none; transform: none; }
+        .hud-btn { width: 36px; height: 36px; border-radius: 10px; background: transparent;
+            border: none; color: var(--text-dim); }
+        .hud-btn:hover { background: rgba(255,255,255,0.07); color: var(--text); box-shadow: none; transform: none; }
         .hud-btn.danger { border: none; color: #e57373; }
         .hud-btn.danger:hover { background: rgba(229,115,115,0.16); color: #fff; box-shadow: none; }
-        .hud-btn.active-mute { color: #f59e0b; border: none; }
-        .hud-btn.listening { color: var(--accent); animation: none; background: rgba(94,234,212,0.12); }
-        #dockMic .hud-btn { width: 40px; height: 40px; color: #e6edf0; }
-        .separator { background: var(--border); height: 22px; }
+        .hud-btn.active-mute { color: #f59e0b; border: none; background: rgba(245,158,11,0.14); }
+        .hud-btn.listening { color: var(--accent); animation: none; background: var(--accent-dim); }
+        /* The mic is the one primary action here, so it gets the accent fill. */
+        #dockMic .hud-btn { width: 40px; height: 40px; border-radius: 12px;
+            background: var(--accent); color: #04221d; }
+        #dockMic .hud-btn:hover { background: var(--accent); color: #04221d; filter: brightness(1.08); }
+        #dockMic .hud-btn.listening { background: var(--accent); color: #04221d;
+            box-shadow: 0 0 0 4px var(--accent-dim); }
+        #dockMic .hud-btn.active-mute { background: rgba(245,158,11,0.16); color: #f59e0b; }
+        .separator { background: var(--border); height: 22px; width: 1px; margin: 0 4px; }
 
         ::-webkit-scrollbar-thumb, .widget *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); }
         ::-webkit-scrollbar-thumb:hover, .widget *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
@@ -4311,7 +4377,7 @@ HTML_UI = r"""
         <div class="cam-hud">
             <div class="brk tl"></div><div class="brk tr"></div>
             <div class="brk bl"></div><div class="brk br"></div>
-            <div class="label">DESK VIEW &mdash; OPTICAL FEED</div>
+            <div class="label" id="camLabel">Desk view</div>
             <div class="rec">&#9679; LIVE</div>
         </div>
         <div id="gestureFlash" style="position:absolute; top:70px; left:50%; transform:translateX(-50%);
@@ -4319,11 +4385,17 @@ HTML_UI = r"""
              border-radius:16px; font-size:13px; letter-spacing:1px; opacity:0; transition:opacity 0.25s; z-index:5;">
         </div>
         <div id="camFullBar">
+            <select id="camPicker" class="cam-picker" title="Switch camera"
+                    onchange="pywebview.api.switch_camera(this.value)"></select>
+            <button class="hud-btn" title="Scan for cameras" onclick="pywebview.api.scan_cameras()">&#8635;</button>
+            <button class="hud-btn" title="Rename this camera" onclick="renameActiveCamera()">&#9998;</button>
+            <div class="separator"></div>
             <button class="hud-btn" title="Identify objects" onclick="pywebview.api.lens_analyze('identify')">&#128269;</button>
             <button class="hud-btn" title="Read text" onclick="pywebview.api.lens_analyze('text')">&#128196;</button>
             <button class="hud-btn" title="Translate" onclick="pywebview.api.lens_analyze('translate')">&#127760;</button>
             <button class="hud-btn" title="Explain" onclick="pywebview.api.lens_analyze('explain')">&#128161;</button>
             <button class="hud-btn" title="Solve" onclick="pywebview.api.lens_analyze('solve')">&#129518;</button>
+            <div class="separator"></div>
             <button class="hud-btn" title="Snapshot" onclick="pywebview.api.capture_camera_photo()">&#128247;</button>
             <button class="hud-btn" id="gestureBtn" title="Toggle gestures" onclick="toggleGestures()">&#128400;</button>
             <button class="hud-btn danger" title="Close desk view" onclick="pywebview.api.toggle_camera(false)">&#10005;</button>
@@ -4580,7 +4652,10 @@ HTML_UI = r"""
 (function () {
   const ACCENT = [94, 234, 212];
   const ACCENT_2 = [167, 139, 250];
+  const ACCENT_3 = [109, 72, 206];   // the violet, shaded, for the sphere's far edge
   const MUTED = [140, 146, 166];
+  const MUTED_DEEP = [88, 94, 112];
+  const MUTED_SHADE = [56, 60, 74];
   const SEGMENTS = 24;
   const TAU = Math.PI * 2;
 
@@ -4635,39 +4710,67 @@ HTML_UI = r"""
       lvl = Math.max(lvl, 0.18 + 0.14 * Math.abs(Math.sin(t * 5.3)) * Math.abs(Math.sin(t * 1.7)));
     }
 
-    // Glow
-    const g = ctx.createRadialGradient(cx, cy, R * 0.5, cx, cy, R * 1.42);
-    g.addColorStop(0, rgba(col, 0));
-    g.addColorStop(0.62, rgba(col, muted ? 0.05 : 0.08 + 0.26 * lvl + 0.22 * flash));
-    g.addColorStop(1, rgba(col, 0));
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(cx, cy, R * 1.42, 0, TAU); ctx.fill();
+    // The mark itself: the site's wordmark orb, scaled up and made live.
+    // CSS reads radial-gradient(circle at 32% 30%, accent, accent-2 72%);
+    // the offsets below put the highlight in the same place on the sphere.
+    const body = muted ? MUTED_DEEP : ACCENT_2;
+    const deep = muted ? MUTED_SHADE : ACCENT_3;
+    const r = R * (0.84 + 0.045 * lvl + 0.06 * flash);
 
-    // Core disc
-    const coreR = R * (0.80 + 0.03 * lvl);
-    const d = ctx.createRadialGradient(cx, cy - coreR * 0.3, coreR * 0.1, cx, cy, coreR * 1.25);
-    d.addColorStop(0, 'rgba(52,55,57,0.94)');
-    d.addColorStop(1, 'rgba(26,29,31,0.94)');
-    ctx.fillStyle = d;
-    ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = Math.max(1, S * 0.003); ctx.stroke();
+    // Halo — the site's 3px ring, grown into something that answers the mic.
+    // Clamped inside the canvas: any further and the corners square it off.
+    const haloR = Math.min(r * 1.85, S * 0.495);
+    const halo = ctx.createRadialGradient(cx, cy, r * 0.94, cx, cy, haloR);
+    halo.addColorStop(0, rgba(col, muted ? 0.07 : 0.18 + 0.30 * lvl + 0.26 * flash));
+    halo.addColorStop(0.45, rgba(body, muted ? 0.04 : 0.10 + 0.18 * lvl));
+    halo.addColorStop(1, rgba(body, 0));
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(cx, cy, haloR, 0, TAU); ctx.fill();
 
-    // Segmented ring
-    const step = TAU / SEGMENTS, gap = 0.9 * Math.PI / 180;
-    const thick = S * 0.024 + S * 0.014 * lvl;
-    const head = angle * 2.2;
-    ctx.lineWidth = thick;
-    ctx.lineCap = 'butt';
-    for (let i = 0; i < SEGMENTS; i++) {
-      const a0 = angle + i * step;
-      const ripple = 0.5 + 0.5 * Math.sin(i * 1.9 + t * 7.0) * Math.sin(i * 0.7 - t * 3.1);
-      const r = R * (1 + 0.11 * lvl * (0.45 + 0.55 * ripple));
-      const sweep = Math.pow(Math.max(0, Math.cos(a0 + step / 2 - head)), 6);
-      const a = Math.min(1, (muted ? 0.5 : 0.55 + 0.45 * sweep) + 0.4 * flash);
-      ctx.strokeStyle = rgba(col, a);
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, a0 + gap / 2, a0 + step - gap / 2);
-      ctx.stroke();
+    // Sphere: highlight at 32%/30% of the box, body colour by 72%. Scaled up,
+    // the stops have to sit tighter than the CSS or it washes out to pastel.
+    // The origin drifts and the mid stop breathes, so the gradient itself
+    // animates now that the spinning ring is gone.
+    const drift = t * 0.38;
+    const ox = cx + r * (-0.36 + 0.11 * Math.cos(drift));
+    const oy = cy + r * (-0.40 + 0.10 * Math.sin(drift * 1.17));
+    const mid = 0.72 + 0.08 * Math.sin(t * 0.52);
+    const sphere = ctx.createRadialGradient(ox, oy, r * 0.02, ox, oy, r * 1.62);
+    sphere.addColorStop(0, rgba(col, 1));
+    sphere.addColorStop(Math.max(0.12, mid - 0.38), rgba(col, 1));
+    sphere.addColorStop(mid, rgba(body, 1));
+    sphere.addColorStop(1, rgba(deep, 1));
+    ctx.fillStyle = sphere;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+
+    // A second teal bloom drifting the other way, so the surface churns
+    // instead of just sliding.
+    const bx = cx + r * 0.34 * Math.cos(-drift * 0.72 + 2.1);
+    const by = cy + r * 0.34 * Math.sin(-drift * 0.72 + 2.1);
+    const bloom = ctx.createRadialGradient(bx, by, 0, bx, by, r * 0.9);
+    bloom.addColorStop(0, rgba(col, muted ? 0.05 : 0.20 + 0.16 * lvl));
+    bloom.addColorStop(1, rgba(col, 0));
+    ctx.fillStyle = bloom;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+
+    // A slow sheen drifting across the surface so it reads as glass, not a dot.
+    const sx = cx + r * 0.42 * Math.cos(angle * 0.6), sy = cy + r * 0.42 * Math.sin(angle * 0.6);
+    const sheen = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 0.85);
+    sheen.addColorStop(0, 'rgba(255,255,255,' + (muted ? 0.02 : 0.05 + 0.07 * lvl).toFixed(3) + ')');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sheen;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+
+    // Rim light, then a breathing ring that only shows when she's hearing you.
+    ctx.lineWidth = Math.max(1, S * 0.004);
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
+
+    if (!muted && (lvl > 0.01 || flash > 0.01)) {
+      const pulse = r * (1.16 + 0.12 * lvl + 0.10 * flash);
+      ctx.lineWidth = Math.max(1, S * 0.0035);
+      ctx.strokeStyle = rgba(col, Math.min(0.55, 0.14 + 0.45 * lvl + 0.35 * flash));
+      ctx.beginPath(); ctx.arc(cx, cy, pulse, 0, TAU); ctx.stroke();
     }
   }
 
@@ -5360,6 +5463,39 @@ window.amyClearSuggestion = function (id) {
             if (t.accent2) r.setProperty('--accent-2', t.accent2);
             if (t.bg) r.setProperty('--bg', t.bg);
             if (t.panel) r.setProperty('--panel', t.panel);
+        }
+
+        // ---- CAMERAS ----
+        // The backend owns the list; this only mirrors it into the picker.
+        let camDevices = [], camActive = '';
+        function setCameraList(payload) {
+            if (!payload) return;
+            camDevices = payload.devices || [];
+            camActive = payload.active || '';
+            const sel = document.getElementById('camPicker');
+            if (sel) {
+                sel.innerHTML = '';
+                camDevices.forEach(d => {
+                    const o = document.createElement('option');
+                    o.value = d.name;
+                    o.textContent = d.name;
+                    sel.appendChild(o);
+                });
+                // Set after every option exists — marking one selected while
+                // still appending leaves the wrong row showing.
+                sel.value = camActive;
+                sel.style.display = camDevices.length > 1 ? '' : 'none';
+            }
+            const label = document.getElementById('camLabel');
+            if (label) label.textContent = camActive || 'Desk view';
+        }
+
+        function renameActiveCamera() {
+            if (!camActive) return;
+            const next = window.prompt('Rename this camera', camActive);
+            if (next && next.trim() && next.trim() !== camActive) {
+                pywebview.api.rename_camera(camActive, next.trim());
+            }
         }
 
         // ---- BACKGROUND TASKS ----
@@ -10237,6 +10373,8 @@ class AmyApp:
             if not self._camera_thread_alive():
                 self._camera_thread = threading.Thread(target=self._camera_worker, daemon=True)
                 self._camera_thread.start()
+            # Fill the picker so the view opens knowing which device it is on.
+            self._push_camera_list()
             # The UI only opens once a real frame arrives, so you never get a
             # black stage when the camera fails to initialise.
         else:
@@ -10256,10 +10394,196 @@ class AmyApp:
         t = getattr(self, "_camera_thread", None)
         return t is not None and t.is_alive()
 
+    # ---- Multiple cameras ---------------------------------------------------
+    # Config holds camera.devices as [{"name": "Desk", "index": 0}, ...] and
+    # camera.active as the name of the one in use. Older configs only had
+    # camera.device_index; that still works and is migrated on first read.
+
+    def _camera_devices(self):
+        """The configured cameras, always at least one, always well-formed."""
+        cam = CONFIG.setdefault("camera", {})
+        raw = cam.get("devices")
+        if not isinstance(raw, list) or not raw:
+            raw = [{"name": "Default", "index": int(cam.get("device_index", 0))}]
+        clean = []
+        for d in raw:
+            if isinstance(d, dict) and d.get("index") is not None:
+                try:
+                    i = int(d["index"])
+                except (TypeError, ValueError):
+                    continue
+                clean.append({"name": str(d.get("name") or f"Camera {i}").strip(), "index": i})
+        if not clean:
+            clean = [{"name": "Default", "index": 0}]
+        cam["devices"] = clean
+        return clean
+
+    def _active_camera(self):
+        """The device currently selected, falling back to the first one."""
+        devices = self._camera_devices()
+        want = str(CONFIG.get("camera", {}).get("active") or devices[0]["name"])
+        for d in devices:
+            if d["name"].lower() == want.lower():
+                return d
+        return devices[0]
+
+    def _find_camera(self, which):
+        """Match a device by name first, then by device index."""
+        s = str(which).strip()
+        devices = self._camera_devices()
+        for d in devices:
+            if d["name"].lower() == s.lower():
+                return d
+        if s.lstrip("-").isdigit():
+            i = int(s)
+            for d in devices:
+                if d["index"] == i:
+                    return d
+        return None
+
+    def _push_camera_list(self):
+        """Keep the picker in the camera view in step with the config."""
+        try:
+            payload = {"devices": self._camera_devices(),
+                       "active": self._active_camera()["name"]}
+            self.broadcast_js(f"setCameraList({json.dumps(payload)})")
+        except Exception as e:
+            log_debug(f"camera list push failed: {e}")
+
+    def probe_cameras(self, max_index=6):
+        """Open each index briefly to see which ones actually deliver frames.
+
+        The device the worker already holds will refuse to open here, so the
+        active camera is reported from config rather than probed."""
+        found = []
+        if not HAS_CV2:
+            return found
+        active_idx = self._active_camera()["index"] if self.camera_active else None
+        for i in range(int(max_index)):
+            if i == active_idx:
+                found.append(i)
+                continue
+            cap = None
+            try:
+                cap = (cv2.VideoCapture(i, getattr(cv2, "CAP_DSHOW", 700))
+                       if sys.platform == "win32" else cv2.VideoCapture(i))
+                if cap is not None and cap.isOpened():
+                    ok, frame = cap.read()
+                    if ok and frame is not None:
+                        found.append(i)
+            except Exception as e:
+                log_debug(f"probe camera {i}: {e}")
+            finally:
+                self._release_capture(cap)
+        return found
+
+    def scan_cameras(self):
+        """Find attached cameras and add any that aren't configured yet."""
+        found = self.probe_cameras()
+        if not found:
+            self.speak("I could not find any cameras, Sir.")
+            return True
+        devices = self._camera_devices()
+        known = {d["index"] for d in devices}
+        added = [i for i in found if i not in known]
+        for i in added:
+            devices.append({"name": f"Camera {i}", "index": i})
+        CONFIG["camera"]["devices"] = devices
+        save_config(CONFIG)
+        self._push_camera_list()
+        if added:
+            self.speak(f"Found {len(found)} cameras, Sir. Added {len(added)} new "
+                       f"{'one' if len(added) == 1 else 'ones'}.")
+        else:
+            self.speak(f"Found {len(found)}, all already set up, Sir.")
+        return True
+
+    def list_cameras(self):
+        devices = self._camera_devices()
+        active = self._active_camera()["name"]
+        self.instantiate_card("Cameras", "carousel",
+                              [f"{d['name']} ({d['index']})" + ("  • active" if d["name"] == active else "")
+                               for d in devices])
+        self.speak(f"{len(devices)} camera{'' if len(devices) == 1 else 's'} set up, Sir. "
+                   f"{active} is active.")
+        return True
+
+    def add_camera(self, name, index):
+        """Add a camera, or repoint an existing name at a different index."""
+        try:
+            index = int(index)
+        except (TypeError, ValueError):
+            self.speak("I need a device number for that camera, Sir.")
+            return True
+        name = str(name).strip() or f"Camera {index}"
+        devices = self._camera_devices()
+        for d in devices:
+            if d["name"].lower() == name.lower():
+                d["index"] = index
+                break
+        else:
+            devices.append({"name": name, "index": index})
+        CONFIG["camera"]["devices"] = devices
+        save_config(CONFIG)
+        self._push_camera_list()
+        self.speak(f"{name} is set up, Sir.")
+        return True
+
+    def rename_camera(self, old, new):
+        target = self._find_camera(old)
+        if target is None:
+            self.speak(f"I don't have a camera called {old}, Sir.")
+            return True
+        new = str(new).strip()
+        if not new:
+            self.speak("That name is empty, Sir.")
+            return True
+        was_active = self._active_camera()["name"] == target["name"]
+        target["name"] = new
+        CONFIG["camera"]["devices"] = self._camera_devices()
+        if was_active:
+            CONFIG["camera"]["active"] = new
+        save_config(CONFIG)
+        self._push_camera_list()
+        self.speak(f"Renamed to {new}, Sir.")
+        return True
+
+    def remove_camera(self, which):
+        devices = self._camera_devices()
+        if len(devices) <= 1:
+            self.speak("That's the only camera, Sir — I'll keep it.")
+            return True
+        target = self._find_camera(which)
+        if target is None:
+            self.speak(f"I don't have a camera called {which}, Sir.")
+            return True
+        devices = [d for d in devices if d["name"] != target["name"]]
+        CONFIG["camera"]["devices"] = devices
+        if self._active_camera()["name"] == target["name"]:
+            CONFIG["camera"]["active"] = devices[0]["name"]
+            self._camera_reopen = True
+        save_config(CONFIG)
+        self._push_camera_list()
+        self.speak(f"Removed {target['name']}, Sir.")
+        return True
+
+    def switch_camera(self, which):
+        """Point the worker at a different device; it reopens on the next frame."""
+        target = self._find_camera(which)
+        if target is None:
+            self.speak(f"I don't have a camera called {which}, Sir.")
+            return True
+        CONFIG.setdefault("camera", {})["active"] = target["name"]
+        save_config(CONFIG)
+        self._camera_reopen = True
+        self._push_camera_list()
+        self.speak(f"Switched to {target['name']}, Sir.")
+        return True
+
     def _open_capture(self):
-        """Open the configured camera index, preferring higher-quality settings."""
+        """Open the active camera, preferring higher-quality settings."""
         cam_cfg = CONFIG.get("camera", {})
-        idx = int(cam_cfg.get("device_index", 0))
+        idx = int(self._active_camera()["index"])
         want_w = int(cam_cfg.get("capture_width", 1280))
         want_h = int(cam_cfg.get("capture_height", 720))
 
@@ -10349,6 +10673,15 @@ class AmyApp:
                     log_debug("Camera released.")
                 time.sleep(0.4)
                 continue
+
+            # A camera switch just drops the handle; the reopen below picks up
+            # whichever device is now active.
+            if getattr(self, "_camera_reopen", False):
+                self._camera_reopen = False
+                if cap is not None:
+                    self._release_capture(cap)
+                    cap = None
+                    log_debug("Switching camera device.")
 
             if cap is None:
                 cap = self._open_capture()
@@ -16735,6 +17068,25 @@ RULES
             self.speak(f"Got it. {alias.group(1)} means {alias.group(2)}.")
             return True
 
+        # --- CAMERAS ---
+        if re.search(r'\b(scan|look) for cameras\b|\bfind (my )?cameras\b', cmd):
+            return self.scan_cameras()
+        if re.search(r'\b(list|what|which) cameras\b|\bcameras do i have\b', cmd):
+            return self.list_cameras()
+        cam_switch = re.search(r'(?:switch|change) (?:to )?(?:the )?(.+?) camera\b', cmd) \
+            or re.search(r'\buse (?:the )?(.+?) camera\b', cmd)
+        if cam_switch:
+            return self.switch_camera(cam_switch.group(1).strip())
+        cam_rename = re.search(r'(?:rename|call) (?:the )?(.+?) camera (?:to |as )(.+)$', cmd)
+        if cam_rename:
+            return self.rename_camera(cam_rename.group(1).strip(), cam_rename.group(2).strip())
+        cam_add = re.search(r'add (?:a )?camera (?:called |named )?(.+?) (?:on|at|as) (?:device |index )?(\d+)', cmd)
+        if cam_add:
+            return self.add_camera(cam_add.group(1).strip(), cam_add.group(2))
+        cam_rm = re.search(r'(?:remove|delete|forget) (?:the )?(.+?) camera\b', cmd)
+        if cam_rm:
+            return self.remove_camera(cam_rm.group(1).strip())
+
         # --- CUSTOMISATION ---
         theme = re.search(r'(?:set |change |switch )?(?:the )?theme (?:to |as )?(\w+)', cmd)
         if theme:
@@ -18150,6 +18502,25 @@ class AmyAPI:
     # --- Desk camera ---
     def toggle_camera(self, active=None):
         self._app.toggle_camera(active)
+
+    # --- Multiple cameras ---
+    def switch_camera(self, which):
+        threading.Thread(target=self._app.switch_camera, args=(which,), daemon=True).start()
+
+    def scan_cameras(self):
+        threading.Thread(target=self._app.scan_cameras, daemon=True).start()
+
+    def add_camera(self, name, index):
+        threading.Thread(target=self._app.add_camera, args=(name, index), daemon=True).start()
+
+    def rename_camera(self, old, new):
+        threading.Thread(target=self._app.rename_camera, args=(old, new), daemon=True).start()
+
+    def remove_camera(self, which):
+        threading.Thread(target=self._app.remove_camera, args=(which,), daemon=True).start()
+
+    def request_camera_list(self):
+        threading.Thread(target=self._app._push_camera_list, daemon=True).start()
 
     def identify_objects(self):
         threading.Thread(target=self._app.identify_objects, daemon=True).start()

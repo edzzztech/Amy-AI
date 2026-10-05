@@ -87,6 +87,13 @@
     },
     "camera": {
         "device_index": 0,
+        "devices": [
+            {
+                "name": "Desk",
+                "index": 0
+            }
+        ],
+        "active": "Desk",
         "stream_fps": 12,
         "capture_width": 1280,
         "capture_height": 720,

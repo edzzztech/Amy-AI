@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://edzzztech.github.io/Amy-AI/sitemap.xml
