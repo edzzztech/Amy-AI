@@ -56,6 +56,39 @@ class Tts(context: Context) {
         engine.setPitch(pitch)
     }
 
+    /**
+     * Get as close to the desktop's voice as Android allows.
+     *
+     * The desktop speaks through edge-tts with en-GB-SoniaNeural. That voice
+     * is a Microsoft cloud endpoint, so it cannot be used offline here — this
+     * picks the nearest thing installed: a British English female voice,
+     * preferring a network-free, higher-quality one.
+     */
+    fun useDesktopVoice() {
+        setVoice(Locale.UK)
+        val best = try {
+            engine.voices
+                ?.filter { it.locale.language == "en" && it.locale.country == "GB" }
+                ?.filterNot { it.isNetworkConnectionRequired }
+                ?.sortedWith(
+                    compareByDescending<android.speech.tts.Voice> { v ->
+                        // Android does not expose gender, so go on the name.
+                        if (FEMALE_HINTS.any { it in v.name.lowercase() }) 1 else 0
+                    }.thenByDescending { it.quality },
+                )
+                ?.firstOrNull()
+        } catch (e: Exception) {
+            null
+        }
+        if (best != null) engine.voice = best
+    }
+
+    private companion object {
+        val FEMALE_HINTS = listOf(
+            "female", "sonia", "libby", "hazel", "susan", "serena", "kate", "-f-",
+        )
+    }
+
     /** Queue one sentence. Pass the generation the text was produced under. */
     fun speak(text: String, turn: Int = generation) {
         if (turn != generation) return          // produced before an interruption

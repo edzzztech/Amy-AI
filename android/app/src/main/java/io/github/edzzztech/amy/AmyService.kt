@@ -7,27 +7,29 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.lifecycle.LifecycleService
-import io.github.edzzztech.amy.core.ActionLog
-import io.github.edzzztech.amy.core.Tts
+import io.github.edzzztech.amy.core.Amy
+import io.github.edzzztech.amy.core.AmyState
+import io.github.edzzztech.amy.core.Listening
+import io.github.edzzztech.amy.core.WakeListener
 
 /**
- * Keeps Amy alive when the app is not in front. Android will kill a background
- * process that holds the microphone, so the listening loop has to live in a
- * foreground service with a visible notification — that is the platform's
- * bargain for always-on voice, not something we can design around.
+ * Keeps Amy alive when the app is not in front, and owns the listening loop.
+ *
+ * Android will kill a background process holding the microphone, so always-on
+ * voice has to live in a foreground service with a visible notification. That
+ * is the platform's bargain, not a design choice.
  */
 class AmyService : LifecycleService() {
 
-    private var tts: Tts? = null
-    private lateinit var actions: ActionLog
+    private var listener: WakeListener? = null
 
     override fun onCreate() {
         super.onCreate()
-        actions = ActionLog(this)
-        tts = Tts(this)
-        // From Android 14 the service type must be declared at start time as
-        // well as in the manifest, or the platform throws instead of starting.
-        val notification = buildNotification("Listening")
+        Amy.start(this)
+
+        val notification = buildNotification("Listening for “Amy”")
+        // From Android 14 the type must be declared at start time as well as in
+        // the manifest, or the platform throws instead of starting.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 NOTIFICATION_ID,
@@ -37,13 +39,36 @@ class AmyService : LifecycleService() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-        actions.record("system", "Service started")
+
+        listener = WakeListener(this) { heard -> onHeard(heard) }.also { it.start() }
+        Amy.actions.record("system", "Listening started")
+    }
+
+    private fun onHeard(heard: String) {
+        when (heard) {
+            WakeListener.INTERNAL_NAME_ONLY -> Amy.tts?.speak("Yes?")
+            WakeListener.INTERNAL_STOPPED -> {
+                AmyState.setState(Listening.Muted)
+                Amy.actions.record("system", "Listening stopped by voice")
+                Amy.tts?.speak("I'll stop listening.")
+            }
+            else -> {
+                Amy.submit(heard, spoken = true)
+                listener?.markExchange()
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        // Restart if Android kills us under memory pressure.
-        return START_STICKY
+        when (intent?.action) {
+            ACTION_LISTEN -> listener?.start()
+            ACTION_SLEEP -> {
+                listener?.stop()
+                AmyState.setState(Listening.Muted)
+            }
+        }
+        return START_STICKY      // restart if Android kills us under pressure
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -52,9 +77,9 @@ class AmyService : LifecycleService() {
     }
 
     override fun onDestroy() {
-        actions.record("system", "Service stopped")
-        tts?.shutdown()
-        tts = null
+        listener?.stop()
+        listener = null
+        Amy.actions.record("system", "Listening stopped")
         super.onDestroy()
     }
 
@@ -75,5 +100,7 @@ class AmyService : LifecycleService() {
 
     companion object {
         private const val NOTIFICATION_ID = 1
+        const val ACTION_LISTEN = "io.github.edzzztech.amy.LISTEN"
+        const val ACTION_SLEEP = "io.github.edzzztech.amy.SLEEP"
     }
 }

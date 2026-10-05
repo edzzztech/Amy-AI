@@ -1,0 +1,134 @@
+package io.github.edzzztech.amy.core
+
+import android.content.Context
+import io.github.edzzztech.amy.automation.Commands
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+
+/**
+ * The brain, owned by neither the activity nor the service.
+ *
+ * It started in MainActivity, which was fine while you had to press a button.
+ * Once she listens in the background the work has to outlive the UI, and two
+ * copies of the model is not an option on a phone — so there is one of these,
+ * created once, used by both.
+ */
+object Amy {
+
+    private var context: Context? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    lateinit var actions: ActionLog
+        private set
+    lateinit var conversations: Conversations
+        private set
+    lateinit var commands: Commands
+        private set
+    lateinit var llm: MediaPipeLlm
+        private set
+
+    var tts: Tts? = null
+        private set
+
+    private var started = false
+
+    /** Safe to call repeatedly; only the first call does anything. */
+    @Synchronized
+    fun start(appContext: Context) {
+        if (started) return
+        val app = appContext.applicationContext
+        context = app
+        actions = ActionLog(app)
+        conversations = Conversations(app)
+        commands = Commands(app, actions)
+        llm = MediaPipeLlm(app)
+        tts = Tts(app).also { engine ->
+            engine.onSpeakStart = { AmyState.setState(Listening.Speaking) }
+            engine.onSpeakDone = { AmyState.setState(Listening.Idle) }
+            scope.launch {
+                if (engine.awaitReady()) engine.useDesktopVoice()
+                else AmyState.setProblem("Text to speech is unavailable on this device.")
+            }
+        }
+        AmyState.setHistory(conversations.list())
+        started = true
+    }
+
+    /** One path for typed, spoken and wake-word input, so nothing drifts apart. */
+    fun submit(text: String, spoken: Boolean) {
+        val clean = text.trim()
+        if (clean.isEmpty()) return
+        conversations.append("you", clean)
+        AmyState.setTurns(conversations.turns())
+        actions.record("message", "${if (spoken) "Said" else "Typed"}: $clean")
+        AmyState.setState(Listening.Thinking)
+
+        // Deterministic commands first: "open Spotify" should open Spotify every
+        // time, not depend on a 1B model choosing a tool correctly.
+        commands.handle(clean)?.let { reply ->
+            deliver(reply, spoken)
+            return
+        }
+        scope.launch { converse(clean, spoken) }
+    }
+
+    private suspend fun converse(prompt: String, spoken: Boolean) {
+        if (!llm.isLoaded) {
+            val file = llm.findModel()
+            if (file == null) {
+                deliver("I have no model yet. Put a .task model in ${llm.expectedPath()}.", false)
+                return
+            }
+            if (!llm.load(file.absolutePath)) {
+                deliver("I found ${file.name} but couldn't load it.", false)
+                return
+            }
+        }
+
+        val buffer = SentenceBuffer()
+        val whole = StringBuilder()
+        try {
+            llm.generate(prompt, system = SYSTEM_PROMPT).collect { token ->
+                whole.append(token)
+                if (spoken) buffer.push(token).forEach { tts?.speak(it) }
+                AmyState.setReply(whole.toString())
+            }
+        } catch (e: Throwable) {
+            deliver("Something went wrong while thinking: ${e.message}", false)
+            return
+        }
+        if (spoken) buffer.flush().takeIf { it.isNotEmpty() }?.let { tts?.speak(it) }
+
+        val reply = whole.toString().trim().ifEmpty { "I have no answer for that." }
+        conversations.append("amy", reply)
+        AmyState.setTurns(conversations.turns())
+        AmyState.setReply("")
+        AmyState.setHistory(conversations.list())
+        if (!spoken) AmyState.setState(Listening.Idle)
+    }
+
+    private fun deliver(reply: String, spoken: Boolean) {
+        conversations.append("amy", reply)
+        AmyState.setTurns(conversations.turns())
+        AmyState.setHistory(conversations.list())
+        if (spoken) tts?.speak(reply) else AmyState.setState(Listening.Idle)
+    }
+
+    fun newConversation() {
+        conversations.start()
+        AmyState.setTurns(emptyList())
+        AmyState.clear()
+    }
+
+    fun openConversation(id: String) {
+        conversations.load(id)?.let { AmyState.setTurns(it.turns) }
+    }
+
+    fun stopSpeaking() = tts?.stop()
+
+    const val SYSTEM_PROMPT =
+        "You are Amy, a concise assistant running on the user's phone. " +
+            "Answer in one or two short sentences unless asked for detail."
+}
