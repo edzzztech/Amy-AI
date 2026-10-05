@@ -21,9 +21,44 @@ Amy isn't a chat window. She has hands, eyes and ears on the machine she runs on
 | **Cameras & gestures** | Point a webcam at something and ask what it is. Hand gestures map to actions: open palm pauses media, fist mutes, peace skips the track. |
 | **Proactive engine** | Thinks on a timer, watches folders for new files, and raises what's worth raising — rate-limited, and silent during quiet hours. |
 | **Persistent memory** | Transcripts, a knowledge base and learned skills live on disk in `amy_data/`, watched for changes and recalled in later conversations. |
+| **Routines** | Things that run on a schedule, in her own words: "every day at 8, brief me on the weather". A routine can do anything you could say out loud. |
+| **An audit trail** | Every plan approved or refused, message sent and app driven is appended to `amy_data/actions.jsonl` as it happens. Ask "what have you done today?" |
+| **Attachments** | Hand her a file — text, Markdown, CSV, JSON, code, PDF or Word — and ask about it. |
 | **Model routing** | Separate local models for fast replies, reasoning, code, CAD and vision. Auto-select picks the right one per request. |
 
 Plus email drafting, SMS via Twilio, Spotify, Home Assistant, Outlook calendar, browser automation, styled PDF reports, a security sentinel, and a plugin system.
+
+---
+
+## Amy for Android
+
+A second build that runs **on the phone**, not a remote control for the desktop — so it works with your PC switched off. It shares the personality, the orb and the memory format, but it is a sibling rather than a port.
+
+- Always listening for the wake word, with a conversation window for follow-ups
+- A local model on-device through MediaPipe, with GPU acceleration
+- Drives Android apps through the accessibility service, with optional root
+- A floating orb over other apps
+- Camera capture, file attachments, conversation history
+
+See **[android/README.md](android/README.md)** for what does and does not carry over — CAD and reading your PC's screen cannot, and it says so plainly rather than implying parity.
+
+### Installing it
+
+There is no Play Store build; you build it yourself.
+
+1. Install [Android Studio](https://developer.android.com/studio) and open the **`android/`** folder, not the repository root
+2. Let Gradle sync — the first run downloads several GB
+3. Enable **Developer options** and **USB debugging** on your phone, plug it in, and press **Run**
+4. Download a MediaPipe `.task` model. [Gemma3-1B-IT](https://huggingface.co/litert-community/Gemma3-1B-IT) from the LiteRT community is the sensible starting point — about 555 MB for the 4-bit build. The repository is gated, so accept the Gemma licence on Hugging Face first.
+5. Push it to the phone:
+
+```bash
+adb push model.task /sdcard/Android/data/io.github.edzzztech.amy/files/
+```
+
+The app loads any `.task` file in that folder, so the filename does not matter.
+
+6. On the phone, grant **microphone** and **notifications**, turn on **Accessibility → Amy** for app control, and set the battery to **Unrestricted** so the listening service survives
 
 ---
 

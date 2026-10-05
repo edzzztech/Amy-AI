@@ -572,6 +572,7 @@
       <a href="#how" class="hide-sm">How it works</a>
       <a href="#start">Setup</a>
       <a href="#config" class="hide-sm">Config</a>
+      <a href="#android">Android</a>
       <a href="#faq" class="hide-sm">FAQ</a>
       <button class="icon-btn" id="theme-btn" aria-label="Toggle colour theme" title="Toggle theme">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -1131,6 +1132,76 @@ ollama pull nomic-embed-text  <span class="cm"># memory search</span></pre></div
   </div>
 </section>
 
+
+<!-- ============ ANDROID ============ -->
+<section id="android">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Also on your phone</div>
+      <h2>Amy for Android, running on the device</h2>
+      <p>
+        A second build that runs on the phone itself rather than remote-controlling your
+        computer &mdash; so it still works with the PC switched off. Same personality, same
+        orb, same memory format.
+      </p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Always listening</h3>
+        <p>Say &ldquo;Amy&rdquo; and she answers. A conversation window after each exchange means follow-ups don&rsquo;t need her name again.</p>
+      </div>
+      <div class="card">
+        <h3>On-device model</h3>
+        <p>A small local model through MediaPipe with GPU acceleration. Nothing is sent anywhere, and it works in aeroplane mode.</p>
+      </div>
+      <div class="card">
+        <h3>Drives your apps</h3>
+        <p>Opens apps, taps by name, types into fields and reads the screen through Android&rsquo;s accessibility service. Root is optional and only adds to it.</p>
+      </div>
+      <div class="card">
+        <h3>A floating orb</h3>
+        <p>The same mark hovering over everything else. Drag it anywhere, tap to open her, long-press to put her to sleep.</p>
+      </div>
+    </div>
+
+    <div class="sec-head" style="margin-top:56px">
+      <h2>Installing it</h2>
+      <p>There&rsquo;s no Play Store build &mdash; you build it from source. About twenty minutes, most of it waiting for downloads.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-top"><span class="step-n"></span><h3>Open the project</h3></div>
+        <p>Install <a href="https://developer.android.com/studio" style="color:var(--accent)">Android Studio</a>, then open the <code>android/</code> folder &mdash; not the repository root, which would confuse Gradle. Let it sync; the first run pulls down several gigabytes.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-top"><span class="step-n"></span><h3>Put the phone in developer mode</h3></div>
+        <p>Tap <strong>Build number</strong> seven times under <em>Settings &rarr; About phone</em>, then turn on <strong>USB debugging</strong> in Developer options. Plug the phone in, accept the prompt, pick it in the device dropdown and press Run.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-top"><span class="step-n"></span><h3>Give her a model</h3></div>
+        <p>Download a MediaPipe <code>.task</code> bundle &mdash; <a href="https://huggingface.co/litert-community/Gemma3-1B-IT" style="color:var(--accent)">Gemma 3 1B</a> is the sensible starting point at roughly 555&nbsp;MB. The repository is gated, so accept the Gemma licence on Hugging Face first, then push it across:</p>
+        <div class="pre-wrap"><button class="copy">copy</button><pre>adb push model.task /sdcard/Android/data/io.github.edzzztech.amy/files/</pre></div>
+        <p>Any <code>.task</code> file in that folder is picked up, so the name doesn&rsquo;t matter.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-top"><span class="step-n"></span><h3>Grant what she needs</h3></div>
+        <p>Allow the <strong>microphone</strong> and <strong>notifications</strong> when asked. For app control, turn on <em>Settings &rarr; Accessibility &rarr; Amy</em>. Set her battery usage to <strong>Unrestricted</strong>, or Android will quietly kill the listening service after a while.</p>
+      </div>
+    </div>
+
+    <div class="pipe-note" style="margin-top:34px">
+      <div><strong>Not a port</strong>CAD, reading your PC&rsquo;s screen and Windows automation can&rsquo;t cross over. A phone runs a 1&ndash;3B model against your desktop&rsquo;s larger ones, so expect it to be quicker but less capable.</div>
+      <div><strong>Still local</strong>Speech, inference and memory all stay on the handset. The two devices sync by pairing, with no account and no server in between.</div>
+      <div><strong>Android 10 or newer</strong>Built against API&nbsp;35. Any reasonably recent phone will do; more RAM means you can run a larger model.</div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ FAQ ============ -->
 <section id="faq" class="alt">
   <div class="wrap">
@@ -1172,6 +1243,11 @@ ollama pull nomic-embed-text  <span class="cm"># memory search</span></pre></div
       </div>
 
       <div class="card">
+        <h3>Is there a phone app?</h3>
+        <p>Yes &mdash; an Android build that runs the assistant on the handset itself, so it works with your PC off. You build it from source; there&rsquo;s no Play Store release.</p>
+      </div>
+
+      <div class="card">
         <h3>Does it run on Mac or Linux?</h3>
         <p>Not yet. The automation layer uses Windows-specific APIs, so Amy currently targets Windows 10 and 11.</p>
       </div>
@@ -1202,6 +1278,8 @@ ollama pull nomic-embed-text  <span class="cm"># memory search</span></pre></div
       "acceptedAnswer": { "@type": "Answer", "text": "Inference goes to localhost. Email, messaging and smart-home integrations are opt-in and only contact services you configure yourself. Credentials stay in your own config file on your machine." } },
     { "@type": "Question", "name": "Can Amy AI control my computer?",
       "acceptedAnswer": { "@type": "Answer", "text": "Yes. It finds and drives real applications through Windows UI automation. Anything classed as risky pauses for your approval first, and shell command execution is off by default." } },
+    { "@type": "Question", "name": "Is there an Amy AI phone app?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. There is an Android build that runs the assistant on the handset itself, so it works with your PC switched off. You build it from source; there is no Play Store release." } },
     { "@type": "Question", "name": "Does Amy AI run on Mac or Linux?",
       "acceptedAnswer": { "@type": "Answer", "text": "Not yet. The automation layer uses Windows-specific APIs, so Amy currently targets Windows 10 and 11." } },
     { "@type": "Question", "name": "Can I use more than one camera?",
