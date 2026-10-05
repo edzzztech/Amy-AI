@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import io.github.edzzztech.amy.automation.Commands
 import io.github.edzzztech.amy.core.*
 import kotlinx.coroutines.launch
 
@@ -40,6 +41,8 @@ class MainActivity : ComponentActivity() {
     private var tts: Tts? = null
     private lateinit var actions: ActionLog
     private lateinit var conversations: Conversations
+    private lateinit var commands: Commands
+    private lateinit var llm: MediaPipeLlm
 
     private val requestMic = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -52,6 +55,8 @@ class MainActivity : ComponentActivity() {
 
         actions = ActionLog(this)
         conversations = Conversations(this)
+        commands = Commands(this, actions)
+        llm = MediaPipeLlm(this)
         refreshHistory()
 
         tts = Tts(this).also { engine ->
@@ -104,20 +109,65 @@ class MainActivity : ComponentActivity() {
         conversations.append("you", clean)
         AmyState.setTurns(conversations.turns())
         actions.record("message", "${if (spoken) "Said" else "Typed"}: $clean")
+        AmyState.setState(Listening.Thinking)
 
-        // Placeholder until the local model lands — see respondTo().
-        val reply = respondTo(clean)
+        // Deterministic commands first: "open Spotify" should open Spotify
+        // every time, not depend on a small model choosing a tool correctly.
+        commands.handle(clean)?.let { reply ->
+            finish(reply, spoken)
+            return
+        }
+
+        lifecycleScope.launch { converse(clean, spoken) }
+    }
+
+    /**
+     * Stream the model's reply, speaking each sentence as it completes so she
+     * starts talking well before the whole answer exists — the same trick the
+     * desktop uses.
+     */
+    private suspend fun converse(prompt: String, spoken: Boolean) {
+        if (!llm.isLoaded) {
+            val file = llm.defaultModelFile()
+            if (!llm.load(file.absolutePath)) {
+                finish(
+                    "I have no model loaded. Push a .task model to " +
+                        "${file.absolutePath} and ask me again.",
+                    spoken = false,
+                )
+                return
+            }
+        }
+
+        val buffer = SentenceBuffer()
+        val whole = StringBuilder()
+        try {
+            llm.generate(prompt, system = SYSTEM_PROMPT).collect { token ->
+                whole.append(token)
+                if (spoken) buffer.push(token).forEach { tts?.speak(it) }
+                AmyState.setReply(whole.toString())
+            }
+        } catch (e: Throwable) {
+            finish("Something went wrong while thinking: ${e.message}", spoken = false)
+            return
+        }
+        if (spoken) buffer.flush().takeIf { it.isNotEmpty() }?.let { tts?.speak(it) }
+
+        val reply = whole.toString().trim().ifEmpty { "I have no answer for that." }
+        conversations.append("amy", reply)
+        AmyState.setTurns(conversations.turns())
+        AmyState.setReply("")
+        refreshHistory()
+        if (!spoken) AmyState.setState(Listening.Idle)
+    }
+
+    /** Store and deliver a reply that was produced in one piece. */
+    private fun finish(reply: String, spoken: Boolean) {
         conversations.append("amy", reply)
         AmyState.setTurns(conversations.turns())
         refreshHistory()
         if (spoken) tts?.speak(reply) else AmyState.setState(Listening.Idle)
     }
-
-    /**
-     * Stands in for [LlmEngine] so the input, storage, history and voice can be
-     * exercised end to end before inference lands. Replacing this is next.
-     */
-    private fun respondTo(heard: String): String = "You said: $heard"
 
     private fun newConversation() {
         conversations.start()
@@ -161,7 +211,17 @@ class MainActivity : ComponentActivity() {
         stt.stop()
         tts?.shutdown()
         tts = null
+        llm.unload()
         super.onDestroy()
+    }
+
+    private companion object {
+        // Short on purpose: a 1B model follows a brief instruction far
+        // better than a long character sketch, and every token here is
+        // one less of context for the actual conversation.
+        const val SYSTEM_PROMPT =
+            "You are Amy, a concise assistant running on the user's phone. " +
+                "Answer in one or two short sentences unless asked for detail."
     }
 }
 

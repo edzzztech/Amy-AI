@@ -52,5 +52,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
+    // On-device inference. A Maven dependency rather than an NDK build
+    // of llama.cpp; LlmEngine is the seam if we ever need to swap it.
+    implementation("com.google.mediapipe:tasks-genai:0.10.24")
+
     testImplementation("junit:junit:4.13.2")
 }
