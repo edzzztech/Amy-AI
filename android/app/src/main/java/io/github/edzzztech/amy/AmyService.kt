@@ -3,6 +3,8 @@ package io.github.edzzztech.amy
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import androidx.lifecycle.LifecycleService
 import io.github.edzzztech.amy.core.ActionLog
@@ -23,7 +25,18 @@ class AmyService : LifecycleService() {
         super.onCreate()
         actions = ActionLog(this)
         tts = Tts(this)
-        startForeground(NOTIFICATION_ID, buildNotification("Listening"))
+        // From Android 14 the service type must be declared at start time as
+        // well as in the manifest, or the platform throws instead of starting.
+        val notification = buildNotification("Listening")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
         actions.record("system", "Service started")
     }
 

@@ -24,17 +24,27 @@ class Tts(context: Context) {
     var generation: Int = 0
         private set
 
-    var onStart: (() -> Unit)? = null
-    var onDone: (() -> Unit)? = null
+    // Deliberately not named onStart/onDone: inside the listener object below
+    // those names resolve to its own methods, not to these properties.
+    var onSpeakStart: (() -> Unit)? = null
+    var onSpeakDone: (() -> Unit)? = null
 
     private val engine = TextToSpeech(context.applicationContext) { status ->
         ready.trySend(status == TextToSpeech.SUCCESS)
     }.apply {
         setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) { onStart?.invoke() }
-            override fun onDone(utteranceId: String?) { onDone?.invoke() }
+            override fun onStart(utteranceId: String?) {
+                onSpeakStart?.invoke()
+            }
+
+            override fun onDone(utteranceId: String?) {
+                onSpeakDone?.invoke()
+            }
+
             @Deprecated("Required by the base class")
-            override fun onError(utteranceId: String?) { onDone?.invoke() }
+            override fun onError(utteranceId: String?) {
+                onSpeakDone?.invoke()
+            }
         })
     }
 
