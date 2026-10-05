@@ -51,7 +51,11 @@ class Stt(private val context: Context) {
     private val listener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) { onReadyForSpeech?.invoke() }
         override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) {}
+        override fun onRmsChanged(rmsdB: Float) {
+            // RMS arrives roughly -2..10 dB from the recogniser; map it to 0..1
+            // so the orb swells with your voice rather than a synthetic pulse.
+            AmyState.setLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
+        }
         override fun onBufferReceived(buffer: ByteArray?) {}
 
         override fun onEndOfSpeech() {
@@ -116,6 +120,7 @@ class Stt(private val context: Context) {
     /** Stop listening but keep the recogniser, so resuming makes no sound. */
     fun pause() {
         listening = false
+        AmyState.setLevel(0f)
         try {
             recognizer?.cancel()
         } catch (e: Exception) {

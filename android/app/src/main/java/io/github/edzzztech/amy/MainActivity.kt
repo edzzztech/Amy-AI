@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import io.github.edzzztech.amy.core.*
+import io.github.edzzztech.amy.ui.DriftingBackground
 import io.github.edzzztech.amy.ui.Icon
 import io.github.edzzztech.amy.ui.Orb
 import io.github.edzzztech.amy.ui.Sym
@@ -108,7 +109,12 @@ class MainActivity : ComponentActivity() {
             return
         }
         AmyState.setProblem(null)
-        startService(Intent(this, OverlayService::class.java))
+        // A toggle, not a one-way switch: tapping again takes it off screen.
+        if (AmyState.overlayOn.value) {
+            stopService(Intent(this, OverlayService::class.java))
+        } else {
+            startService(Intent(this, OverlayService::class.java))
+        }
     }
 
     /** The mic button wakes or sleeps the always-on listener. */
@@ -259,7 +265,11 @@ private fun Home(
         label = "orbSize",
     )
 
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    val level by AmyState.level.collectAsState()
+    val overlayOn by AmyState.overlayOn.collectAsState()
+
+    Box(Modifier.fillMaxSize()) {
+        DriftingBackground(Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
 
             Row(
@@ -288,7 +298,7 @@ private fun Home(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(14.dp))
-                Orb(state = state, modifier = Modifier.size(orbSize))
+                Orb(state = state, level = level, modifier = Modifier.size(orbSize))
 
                 AnimatedVisibility(visible = !hasTurns, enter = fadeIn(), exit = fadeOut()) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -356,7 +366,7 @@ private fun Home(
                 Spacer(Modifier.width(4.dp))
                 ToolButton(Sym.Camera, onCamera)
                 Spacer(Modifier.width(4.dp))
-                ToolButton(Sym.Orb, onOverlay)
+                ToolButton(Sym.Orb, onOverlay, active = overlayOn)
                 Spacer(Modifier.width(6.dp))
                 OutlinedTextField(
                     value = draft,
@@ -497,15 +507,18 @@ private fun MicOrSend(hasDraft: Boolean, state: Listening, onClick: () -> Unit) 
 }
 
 @Composable
-private fun ToolButton(sym: Sym, onClick: () -> Unit) {
+private fun ToolButton(sym: Sym, onClick: () -> Unit, active: Boolean = false) {
     Box(
         Modifier
             .size(42.dp)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surface)
+            .background(
+                if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                else MaterialTheme.colorScheme.surface
+            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Icon(sym, Muted, 19.dp) }
+    ) { Icon(sym, if (active) MaterialTheme.colorScheme.primary else Muted, 19.dp) }
 }
 
 /** A tappable opener, the way Gemini offers starting points. */

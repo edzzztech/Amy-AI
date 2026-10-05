@@ -91,8 +91,10 @@ object Amy {
         val whole = StringBuilder()
         try {
             llm.generate(withHistory(prompt), system = SYSTEM_PROMPT).collect { token ->
-                whole.append(token)
-                if (spoken) buffer.push(token).forEach { tts?.speak(it) }
+                val clean = scrub(token)
+                if (clean.isEmpty()) return@collect
+                whole.append(clean)
+                if (spoken) buffer.push(clean).forEach { tts?.speak(it) }
                 AmyState.setReply(whole.toString())
             }
         } catch (e: Throwable) {
@@ -120,6 +122,14 @@ object Amy {
         AmyState.setState(Listening.Thinking)
         scope.launch { converse(prompt, spoken = false) }
     }
+
+    /**
+     * Remove control tokens the model sometimes emits verbatim. Spoken aloud,
+     * "start of turn model" is the kind of thing that makes an assistant sound
+     * broken, so they are stripped before anything reaches the voice.
+     */
+    private fun scrub(text: String): String =
+        text.replace(TURN_TOKENS, "")
 
     /**
      * Give the model the last few turns, so follow-ups like "and the other one?"
@@ -171,6 +181,9 @@ object Amy {
     }
 
     private const val HISTORY_TURNS = 6
+
+    private val TURN_TOKENS =
+        Regex("<\\s*/?\\s*(start_of_turn|end_of_turn|eos|bos|pad)\\s*>", RegexOption.IGNORE_CASE)
 
     const val SYSTEM_PROMPT =
         "You are Amy, a concise assistant running on the user's phone. " +

@@ -71,9 +71,13 @@ class MediaPipeLlm(private val context: Context) : LlmEngine {
     }
 
     /**
-     * Streams partial results. MediaPipe hands back cumulative text in some
-     * versions and deltas in others, so this normalises to deltas — emitting
-     * only what is new since the last callback.
+     * Streams the reply.
+     *
+     * MediaPipe's progress listener delivers *deltas* — each callback is the
+     * next fragment, not the whole answer so far. An earlier version here tried
+     * to "normalise" that by trimming a prefix off every chunk, which silently
+     * ate the first characters of each one and produced fluent-looking
+     * nonsense. Deltas are appended as they arrive, and nothing else.
      */
     override fun generate(prompt: String, system: String?, maxTokens: Int): Flow<String> =
         callbackFlow {
@@ -83,9 +87,8 @@ class MediaPipeLlm(private val context: Context) : LlmEngine {
                 return@callbackFlow
             }
             cancelled = false
-            var emitted = 0
 
-            val full = if (system.isNullOrBlank()) prompt else "$system\n\n$prompt"
+            val full = chatPrompt(prompt, system)
 
             try {
                 llm.generateResponseAsync(full) { partial: String, done: Boolean ->
@@ -93,16 +96,7 @@ class MediaPipeLlm(private val context: Context) : LlmEngine {
                         close()
                         return@generateResponseAsync
                     }
-                    val delta = if (partial.length >= emitted && partial.startsWith(
-                            partial.take(emitted)
-                        )
-                    ) {
-                        partial.substring(emitted)
-                    } else {
-                        partial                       // already a delta
-                    }
-                    emitted = maxOf(emitted, partial.length)
-                    if (delta.isNotEmpty()) trySend(delta)
+                    if (partial.isNotEmpty()) trySend(partial)
                     if (done) close()
                 }
             } catch (e: Throwable) {
@@ -123,6 +117,24 @@ class MediaPipeLlm(private val context: Context) : LlmEngine {
             // Closing an engine that already died is not worth reporting.
         }
         engine = null
+    }
+
+    /**
+     * Wrap the prompt in Gemma's turn markers.
+     *
+     * Instruction-tuned Gemma models are trained on this exact shape. Handed
+     * bare text they tend to continue it rather than answer it — rambling,
+     * inventing a dialogue, or drifting off topic, which reads as the model
+     * being stupid when it is really being mis-prompted.
+     */
+    private fun chatPrompt(prompt: String, system: String?): String = buildString {
+        append("<start_of_turn>user\n")
+        if (!system.isNullOrBlank()) {
+            append(system.trim())
+            append("\n\n")
+        }
+        append(prompt.trim())
+        append("<end_of_turn>\n<start_of_turn>model\n")
     }
 
     private fun buildOptions(file: File, gpu: Boolean) =

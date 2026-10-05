@@ -44,6 +44,22 @@ object AmyState {
         _history.value = list
     }
 
+    /** Whether the floating orb is on screen, so the UI can show its state. */
+    private val _overlayOn = MutableStateFlow(false)
+    val overlayOn: StateFlow<Boolean> = _overlayOn.asStateFlow()
+
+    fun setOverlay(on: Boolean) {
+        _overlayOn.value = on
+    }
+
+    /** Live microphone level, 0..1, for the orb to react to. */
+    private val _level = MutableStateFlow(0f)
+    val level: StateFlow<Float> = _level.asStateFlow()
+
+    fun setLevel(value: Float) {
+        _level.value = value.coerceIn(0f, 1f)
+    }
+
     fun setState(next: Listening) {
         _state.value = next
     }

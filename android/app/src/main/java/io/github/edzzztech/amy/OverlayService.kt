@@ -34,6 +34,7 @@ class OverlayService : Service() {
     private var orb: OrbView? = null
     private var params: WindowManager.LayoutParams? = null
     private var watcher: Job? = null
+    private var levelWatcher: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main)
 
     override fun onCreate() {
@@ -44,6 +45,7 @@ class OverlayService : Service() {
         }
         Amy.start(this)
         show()
+        AmyState.setOverlay(true)
     }
 
     private fun show() {
@@ -81,6 +83,9 @@ class OverlayService : Service() {
         // Mirror her state onto the floating orb.
         watcher = scope.launch {
             AmyState.state.collect { state -> view.state = state }
+        }
+        levelWatcher = scope.launch {
+            AmyState.level.collect { lvl -> view.level = lvl }
         }
     }
 
@@ -149,9 +154,11 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         watcher?.cancel()
+        levelWatcher?.cancel()
         orb?.let { view -> runCatching { windowManager?.removeView(view) } }
         orb = null
         windowManager = null
+        AmyState.setOverlay(false)
         super.onDestroy()
     }
 
