@@ -25,3 +25,12 @@ desktop.ini
 
 # Local editor/tool configuration
 .claude/
+
+# Android build output
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.apk
+*.aab

@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Amy</string>
+    <string name="accessibility_description">Lets Amy read what is on screen and tap, type and scroll on your behalf, so she can drive apps when you ask her to.</string>
+    <string name="service_channel">Amy is listening</string>
+</resources>
