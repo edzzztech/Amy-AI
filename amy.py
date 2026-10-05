@@ -3894,11 +3894,11 @@ HTML_UI = r"""
         /* Over the feed, panels only get more transparent — same card otherwise,
            so the camera view doesn't reintroduce the old teal-tinted styling. */
         .workspace.over-camera .widget {
-            background: rgba(14, 16, 23, 0.78);
-            box-shadow: 0 24px 60px -12px rgba(0,0,0,0.8);
+            background: rgba(11, 13, 19, 0.86);
+            box-shadow: none;
         }
         .workspace.over-camera .widget:hover {
-            background: rgba(14, 16, 23, 0.94);
+            background: rgba(11, 13, 19, 0.97);
         }
         /* Keep the dock and title bar above the feed too. */
         body.camera-mode .bottom-control-bar { z-index: 1000; }
@@ -4189,61 +4189,88 @@ HTML_UI = r"""
         .reactor-container.docked .core-center { transform: translateY(56px); }
         .reactor-container.docked .orb-state { display: none; }
 
-        /* Panels: a solid card with a brand hairline along the top edge,
-           not a floating pane of glass. Content legibility over transparency. */
+        /* ==========================================================
+           PANELS — instrument, not card. Square corners, hard 1px
+           rules, flat surfaces, dense type. Nothing rounded, nothing
+           glowing, no drop shadows pretending to float.
+           ========================================================== */
         .widget, .jarvis-inapp-card, .amy-inapp-card, .stage-panel {
-            background: rgba(14, 16, 23, 0.94); border: 1px solid var(--border);
-            border-radius: 16px; overflow: hidden;
-            backdrop-filter: blur(20px) saturate(130%);
-            box-shadow: 0 24px 60px -12px rgba(0,0,0,0.7);
-            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease; }
-        /* The one flash of brand on each panel: a 2px teal-to-violet edge. */
-        .widget::before, .jarvis-inapp-card::before, .amy-inapp-card::before {
-            content: ''; display: block; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-            background: linear-gradient(100deg, var(--accent), var(--accent-2));
-            opacity: 0.85; pointer-events: none; z-index: 3; border: none; border-radius: 0; }
+            background: #0b0d13;
+            border: 1px solid #262a36;
+            border-radius: 0;
+            overflow: hidden;
+            backdrop-filter: none;
+            box-shadow: none;
+            transition: border-color 0.12s linear; }
+        /* A single accent rule under the header bar — the only colour on the chrome. */
+        .widget::before, .jarvis-inapp-card::before, .amy-inapp-card::before { display: none; }
         .widget::after { display: none; }
-        .widget:hover { border-color: var(--border-lit); box-shadow: 0 28px 68px -12px rgba(0,0,0,0.75); }
+        .widget:hover { border-color: #39404f; box-shadow: none; transform: none; }
         .jarvis-inapp-card:hover, .amy-inapp-card:hover {
-            border-color: var(--border-lit); transform: translateY(-2px); }
-        .widget:focus-within { border-color: var(--accent-soft); }
-        /* Header: no divider rule, just air. The eyebrow carries the type. */
-        .widget-header { color: var(--text-dim); text-shadow: none; background: transparent;
-            letter-spacing: 0.14em; font-weight: 500; font-size: 10px; text-transform: uppercase;
-            font-family: var(--mono-font); border-bottom: none; padding: 16px 18px 10px; }
-        .widget-header .status-dot, .status-dot { width: 6px; height: 6px; box-shadow: none; animation: none; background: var(--accent); }
-        .close-widget-btn { color: var(--text-dim); font-weight: 400; transition: color 0.18s ease; }
-        .close-widget-btn:hover { color: var(--text); }
-        .resize-grip { background: none; border-right: 2px solid var(--border); border-bottom: 2px solid var(--border);
-            width: 10px; height: 10px; right: 7px; bottom: 7px; border-bottom-right-radius: 3px; }
-        .chat-messages { color: #c3c8d6; font-size: 13px; line-height: 1.65; }
-        .chat-input-area { background: rgba(0,0,0,0.18); border-top: 1px solid var(--border); }
+            border-color: #39404f; transform: none; }
+        .widget:focus-within { border-color: var(--accent); }
+
+        /* Header is a real title bar: filled band, hard rule, mono label. */
+        .widget-header {
+            color: var(--text-dim); text-shadow: none;
+            background: #12151d;
+            border-bottom: 1px solid #262a36;
+            font-family: var(--mono-font); font-size: 10px; font-weight: 500;
+            letter-spacing: 0.18em; text-transform: uppercase;
+            padding: 7px 10px; min-height: 28px; border-radius: 0; }
+        .widget-header .status-dot, .status-dot {
+            width: 5px; height: 5px; border-radius: 0; box-shadow: none;
+            animation: none; background: var(--accent); }
+        .card-title-text { color: var(--text); letter-spacing: 0.14em; font-size: 10px;
+            font-family: var(--mono-font); font-weight: 500; text-transform: uppercase; }
+        /* Type tag: square, bracketed, monospace. */
+        .card-type-badge { background: transparent; color: var(--text-dim);
+            border: 1px solid #262a36; border-radius: 0; padding: 2px 6px;
+            font-family: var(--mono-font); font-size: 9px; letter-spacing: 0.1em;
+            text-transform: uppercase; }
+        .close-widget-btn { color: var(--text-dim); font-weight: 400; font-size: 13px;
+            width: 20px; height: 20px; border-radius: 0; transition: none; }
+        .close-widget-btn:hover { color: var(--text); background: #1c2029; }
+        /* Resize handle as a corner notch, not a rounded grip. */
+        .resize-grip { background: none; border-radius: 0;
+            border-right: 1px solid #39404f; border-bottom: 1px solid #39404f;
+            width: 8px; height: 8px; right: 3px; bottom: 3px; }
+
+        .card-body-content { font-size: 12.5px; color: #b9bfcd; line-height: 1.6; padding: 10px; }
+        .card-body-content pre { background: #07090e; border: 1px solid #262a36;
+            border-radius: 0; padding: 10px 12px; }
+
+        /* Chat: a log, not a conversation bubble stack. */
+        .chat-messages { color: #b9bfcd; font-size: 12.5px; line-height: 1.6; padding: 8px 10px; }
+        .chat-input-area { background: #0e1118; border-top: 1px solid #262a36;
+            padding: 8px; gap: 6px; }
         .chat-input-area input, .stage-input, .scratchpad-area, #todoInput, #docEditInstruction {
-            background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text);
-            border-radius: 10px; transition: border-color 0.18s ease; }
+            background: #07090e; border: 1px solid #262a36; color: var(--text);
+            border-radius: 0; padding: 7px 9px; font-size: 12.5px;
+            transition: border-color 0.12s linear; }
         .chat-input-area input:focus, .stage-input:focus, .scratchpad-area:focus,
-        #todoInput:focus, #docEditInstruction:focus { border-color: var(--accent-soft); outline: none; }
-        /* One primary button per panel, same as the site's .btn-primary. */
-        .chat-input-area button { background: var(--accent); color: #04221d; border-radius: 10px;
-            font-weight: 580; letter-spacing: 0; border: none;
-            box-shadow: 0 6px 24px -8px var(--accent); transition: box-shadow 0.2s ease, filter 0.2s ease; }
-        .chat-input-area button:hover { box-shadow: 0 10px 30px -8px var(--accent); filter: brightness(1.06); }
-        /* Everything else is the ghost button: hairline, neutral, quiet. */
-        .action-btn { background: transparent; color: var(--text); border: 1px solid var(--border-lit);
-            border-radius: 10px; letter-spacing: 0; font-weight: 580; text-transform: none;
-            transition: background 0.2s ease, border-color 0.2s ease; }
-        .action-btn:hover { background: rgba(255,255,255,0.06); color: var(--text);
-            border-color: var(--border-lit); box-shadow: none; }
-        /* Badges are the site's chips: mono, pill, muted. */
-        .card-type-badge { background: var(--surface-2); color: var(--text-dim);
-            border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px;
-            font-family: var(--mono-font); font-size: 9.5px; letter-spacing: 0.04em; text-transform: lowercase; }
-        .card-title-text { color: var(--text); letter-spacing: -0.01em; font-size: 13px; font-weight: 620; }
-        .card-body-content { font-size: 12.5px; color: #c3c8d6; line-height: 1.65; }
-        .card-body-content pre { background: var(--surface-2); border: 1px solid var(--border);
-            border-radius: 10px; padding: 12px 14px; }
-        .telemetry-fill { background: var(--accent); box-shadow: none; }
-        .todo-item { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; }
+        #todoInput:focus, #docEditInstruction:focus { border-color: var(--accent); outline: none; }
+        .chat-input-area input::placeholder { color: #5d6474; }
+
+        /* Buttons: square, bordered, mono, uppercase. No fills, no glow. */
+        .chat-input-area button {
+            background: transparent; color: var(--accent);
+            border: 1px solid var(--accent); border-radius: 0; box-shadow: none;
+            font-family: var(--mono-font); font-size: 10px; font-weight: 500;
+            letter-spacing: 0.12em; text-transform: uppercase; padding: 7px 12px;
+            transition: background 0.12s linear, color 0.12s linear; }
+        .chat-input-area button:hover { background: var(--accent); color: #04221d;
+            box-shadow: none; filter: none; }
+        .action-btn { background: transparent; color: var(--text-dim);
+            border: 1px solid #262a36; border-radius: 0;
+            font-family: var(--mono-font); font-size: 10px; font-weight: 500;
+            letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 10px;
+            transition: border-color 0.12s linear, color 0.12s linear; }
+        .action-btn:hover { background: transparent; color: var(--text);
+            border-color: var(--accent); box-shadow: none; }
+
+        .telemetry-fill { background: var(--accent); box-shadow: none; border-radius: 0; }
+        .todo-item { background: #0e1118; border: 1px solid #262a36; border-radius: 0; }
         .watermark { display: none; }
 
         /* Fullscreen stages: dark glass, no HUD brackets or scanlines */
@@ -4269,6 +4296,15 @@ HTML_UI = r"""
             backdrop-filter: blur(24px) saturate(140%); box-shadow: 0 18px 50px rgba(0,0,0,0.5);
             display: flex; align-items: center; }
         /* The camera picker: a quiet select that matches the ghost buttons. */
+        /* Drawn icons, not emoji: they inherit the button colour and stay crisp. */
+        #camFullBar .hud-btn svg, .stage-bar .hud-btn svg { width: 18px; height: 18px; display: block; }
+        /* Says what the feed is doing while it is still black. */
+        #camStatus { display: none; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); z-index: 4; pointer-events: none;
+            font-family: var(--mono-font); font-size: 12px; letter-spacing: 0.08em;
+            color: var(--text-dim); background: var(--glass-strong);
+            border: 1px solid var(--border); padding: 10px 18px; max-width: 70%;
+            text-align: center; }
         .cam-picker { background: rgba(255,255,255,0.04); color: var(--text);
             border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px;
             font-family: var(--ui-font); font-size: 12.5px; min-width: 132px; max-width: 200px;
@@ -4419,21 +4455,22 @@ HTML_UI = r"""
              background:rgba(0,0,0,0.7); border:1px solid #10b981; color:#10b981; padding:6px 16px;
              border-radius:16px; font-size:13px; letter-spacing:1px; opacity:0; transition:opacity 0.25s; z-index:5;">
         </div>
+        <div id="camStatus"></div>
         <div id="camFullBar">
             <select id="camPicker" class="cam-picker" title="Switch camera"
                     onchange="pywebview.api.switch_camera(this.value)"></select>
-            <button class="hud-btn" title="Scan for cameras" onclick="pywebview.api.scan_cameras()">&#8635;</button>
-            <button class="hud-btn" title="Rename this camera" onclick="renameActiveCamera()">&#9998;</button>
+            <button class="hud-btn" title="Scan for cameras" aria-label="Scan for cameras" onclick="pywebview.api.scan_cameras()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 3.5V9H15"/></svg></button>
+            <button class="hud-btn" title="Rename this camera" aria-label="Rename this camera" onclick="renameActiveCamera()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20.5h4L19.1 9.4a2 2 0 0 0-2.8-2.8L5.2 17.7 4 20.5z"/><path d="M14.8 7.9l2.8 2.8"/></svg></button>
             <div class="separator"></div>
-            <button class="hud-btn" title="Identify objects" onclick="pywebview.api.lens_analyze('identify')">&#128269;</button>
-            <button class="hud-btn" title="Read text" onclick="pywebview.api.lens_analyze('text')">&#128196;</button>
-            <button class="hud-btn" title="Translate" onclick="pywebview.api.lens_analyze('translate')">&#127760;</button>
-            <button class="hud-btn" title="Explain" onclick="pywebview.api.lens_analyze('explain')">&#128161;</button>
-            <button class="hud-btn" title="Solve" onclick="pywebview.api.lens_analyze('solve')">&#129518;</button>
+            <button class="hud-btn" title="Identify objects" aria-label="Identify objects" onclick="pywebview.api.lens_analyze(&#39;identify&#39;)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5v-3a2 2 0 0 1 2-2h3M15.5 3.5h3a2 2 0 0 1 2 2v3M20.5 15.5v3a2 2 0 0 1-2 2h-3M8.5 20.5h-3a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="3"/></svg></button>
+            <button class="hud-btn" title="Read text" aria-label="Read text" onclick="pywebview.api.lens_analyze(&#39;text&#39;)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/><path d="M9 13h6M9 16.5h4"/></svg></button>
+            <button class="hud-btn" title="Translate" aria-label="Translate" onclick="pywebview.api.lens_analyze(&#39;translate&#39;)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.3 2.3 3.5 5.3 3.5 8.5s-1.2 6.2-3.5 8.5c-2.3-2.3-3.5-5.3-3.5-8.5S9.7 5.8 12 3.5z"/></svg></button>
+            <button class="hud-btn" title="Explain" aria-label="Explain" onclick="pywebview.api.lens_analyze(&#39;explain&#39;)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2a5.8 5.8 0 0 0-3.4 10.5c.6.4.9 1.1.9 1.8v.6h5v-.6c0-.7.3-1.4.9-1.8A5.8 5.8 0 0 0 12 3.2z"/><path d="M9.8 18.6h4.4M10.6 21h2.8"/></svg></button>
+            <button class="hud-btn" title="Solve" aria-label="Solve" onclick="pywebview.api.lens_analyze(&#39;solve&#39;)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7h7"/><path d="M9 11.8h.01M12 11.8h.01M15 11.8h.01M9 15.2h.01M12 15.2h.01M15 15.2h.01M9 18.4h.01M12 18.4h.01M15 18.4h.01"/></svg></button>
             <div class="separator"></div>
-            <button class="hud-btn" title="Snapshot" onclick="pywebview.api.capture_camera_photo()">&#128247;</button>
-            <button class="hud-btn" id="gestureBtn" title="Toggle gestures" onclick="toggleGestures()">&#128400;</button>
-            <button class="hud-btn danger" title="Close desk view" onclick="pywebview.api.toggle_camera(false)">&#10005;</button>
+            <button class="hud-btn" title="Snapshot" aria-label="Snapshot" onclick="pywebview.api.capture_camera_photo()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.8a2 2 0 0 1 2-2h1.9l1.1-2h7l1.1 2h1.9a2 2 0 0 1 2 2v8.4a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.1"/></svg></button>
+            <button class="hud-btn" id="gestureBtn" title="Toggle gestures" aria-label="Toggle gestures" onclick="toggleGestures()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.2 11.5V5.8a1.4 1.4 0 0 1 2.8 0v5.2"/><path d="M12 11V4.6a1.4 1.4 0 0 1 2.8 0V11"/><path d="M14.8 11.4V7.2a1.4 1.4 0 0 1 2.8 0v6.3c0 4.1-2.4 7-6.1 7-3.4 0-5.9-2.3-5.9-5.8v-3.4a1.4 1.4 0 0 1 2.8 0v1.6"/></svg></button>
+            <button class="hud-btn danger" title="Close desk view" aria-label="Close desk view" onclick="pywebview.api.toggle_camera(false)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
         </div>
     </div>
 
@@ -4528,10 +4565,10 @@ HTML_UI = r"""
         </div>
         <div class="stage-bar">
             <input type="text" id="cadInstruction" class="stage-input" placeholder="Describe a change..." autocomplete="off" style="width:280px;">
-            <button class="hud-btn" title="Revise" onclick="submitCadEdit()">&#10227;</button>
-            <button class="hud-btn" title="Improve design" onclick="pywebview.api.cad_improve()">&#10024;</button>
-            <button class="hud-btn" title="Export STL" onclick="pywebview.api.cad_export_stl()">&#128190;</button>
-            <button class="hud-btn" title="Open in OpenSCAD" onclick="pywebview.api.cad_open_external()">&#127760;</button>
+            <button class="hud-btn" title="Revise" onclick="submitCadEdit()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 3.5V9H15"/></svg></button>
+            <button class="hud-btn" title="Improve design" onclick="pywebview.api.cad_improve()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l9-9"/><path d="M13.5 10.5l2.2-2.2"/><path d="M17.5 3.2l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/><path d="M20.4 12.6l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"/></svg></button>
+            <button class="hud-btn" title="Export STL" onclick="pywebview.api.cad_export_stl()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v10"/><path d="M8.2 10l3.8 3.8L15.8 10"/><path d="M4.5 16v2.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V16"/></svg></button>
+            <button class="hud-btn" title="Open in OpenSCAD" onclick="pywebview.api.cad_open_external()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4.5h5.5V10"/><path d="M19.5 4.5L11 13"/><path d="M18 14.5v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2h4"/></svg></button>
         </div>
     </div>
 
@@ -5525,6 +5562,15 @@ window.amyClearSuggestion = function (id) {
             }
             const label = document.getElementById('camLabel');
             if (label) label.textContent = camActive || 'Desk view';
+        }
+
+        // A black camera view is impossible to diagnose. This says what is
+        // happening — opening, waiting, or failed — until frames arrive.
+        function setCameraStatus(text) {
+            const el = document.getElementById('camStatus');
+            if (!el) return;
+            el.textContent = text || '';
+            el.style.display = text ? 'block' : 'none';
         }
 
         function renameActiveCamera() {
@@ -10418,6 +10464,8 @@ class AmyApp:
             # Open the stage now rather than waiting on the first frame, so the
             # view is full-screen from the moment it is asked for.
             self.run_js("setCameraState(true)")
+            name = self._active_camera()["name"]
+            self.run_js(f"setCameraStatus({json.dumps('Starting ' + name + '...')})")
             # Fill the picker so the view opens knowing which device it is on.
             self._push_camera_list()
             # The UI only opens once a real frame arrives, so you never get a
@@ -10731,6 +10779,10 @@ class AmyApp:
             if cap is None:
                 cap = self._open_capture()
                 if cap is None:
+                    msg = (f"Could not open {self._active_camera()['name']} "
+                           f"(device {self._active_camera()['index']}). It may be in use by "
+                           f"another app, or blocked by camera privacy settings.")
+                    self.run_js(f"setCameraStatus({json.dumps(msg)})")
                     self.safe_log("Could not open the camera. Check it isn't in use by another app, "
                                   "and that camera privacy settings allow desktop apps.")
                     self.speak("I could not access the camera, Sir.")
@@ -10748,6 +10800,8 @@ class AmyApp:
                     # The device was probably unplugged or grabbed by another app.
                     if fail_count > 12:
                         log_debug("Camera stopped delivering frames; reopening.")
+                        self.run_js("setCameraStatus('No frames from this camera - reopening...')")
+                        self._camera_announced = False
                         self._release_capture(cap)
                         cap = None
                         fail_count = 0
@@ -10761,6 +10815,7 @@ class AmyApp:
 
                 if not self._camera_announced:
                     self._camera_announced = True
+                    self.run_js("setCameraStatus('')")
                     self.run_js("cameraReady()")
                     self.speak("Desk view online, Sir.")
 
