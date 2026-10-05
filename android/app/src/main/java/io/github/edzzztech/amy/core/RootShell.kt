@@ -74,7 +74,11 @@ object RootShell {
 
     /** Type text system-wide. Root only. */
     suspend fun type(text: String): Boolean {
-        val escaped = text.replace("\\", "\\\\").replace("'", "'\''")
+        // Inside single quotes every character is literal, including the
+        // backslash, so the quote is the only thing needing escaping: close
+        // the quote, emit an escaped one, reopen.  ' -> '\''
+        // Doubling backslashes here would corrupt them, not protect them.
+        val escaped = text.replace("'", "'\\''")
         return run("input text '$escaped'").exitCode == 0
     }
 }
