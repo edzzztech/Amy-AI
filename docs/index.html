@@ -313,6 +313,27 @@
     background:var(--surface);padding:30px 22px;overflow-x:auto;
   }
   .pipe svg{display:block;min-width:720px;margin:0 auto;max-width:100%;height:auto}
+  /* Below the SVG's usable width the diagram becomes a vertical list instead
+     of a 720px sideways scroll. Same content, same order. */
+  .pipe-steps{display:none}
+  .pipe-steps ol{list-style:none;margin:0;padding:0;counter-reset:p}
+  .pipe-steps li{
+    counter-increment:p;position:relative;padding:0 0 20px 38px;
+    color:var(--muted);font-size:.92rem;
+  }
+  .pipe-steps li::before{
+    content:counter(p);position:absolute;left:0;top:0;
+    width:24px;height:24px;border-radius:7px;display:grid;place-items:center;
+    background:var(--surface-2);border:1px solid var(--line);
+    font-family:var(--mono);font-size:.7rem;color:var(--accent);
+  }
+  .pipe-steps li::after{
+    content:"";position:absolute;left:11px;top:28px;bottom:4px;width:1px;
+    background:var(--line);
+  }
+  .pipe-steps li:last-child{padding-bottom:0}
+  .pipe-steps li:last-child::after{display:none}
+  .pipe-steps strong{display:block;color:var(--text);font-weight:600;margin-bottom:2px}
   .pipe-note{
     display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
     margin-top:26px;
@@ -321,10 +342,10 @@
   .pipe-note strong{display:block;color:var(--text);font-weight:600;margin-bottom:3px;font-size:.94rem}
 
   /* ---------- steps ---------- */
-  .steps{display:grid;gap:20px;counter-reset:s}
+  .steps{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;counter-reset:s}
   .step{
     border:1px solid var(--line);border-radius:var(--radius);
-    background:var(--surface);padding:22px 24px;
+    background:var(--surface);padding:22px 24px;min-width:0;
   }
   .step-top{display:flex;align-items:center;gap:12px;margin-bottom:12px}
   .step-n{
@@ -341,7 +362,7 @@
     font-family:var(--mono);font-size:.82rem;line-height:1.75;
   }
   pre .cm{color:var(--muted)}
-  .pre-wrap{position:relative}
+  .pre-wrap{position:relative;min-width:0}
   .copy{
     position:absolute;top:8px;right:8px;border:1px solid var(--line);
     background:var(--surface);color:var(--muted);border-radius:7px;
@@ -352,7 +373,7 @@
   .copy:hover{color:var(--text)}
 
   /* ---------- config table ---------- */
-  .tbl{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+  .tbl{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;overflow-x:auto;background:var(--surface);-webkit-overflow-scrolling:touch}
   table{width:100%;border-collapse:collapse;font-size:.9rem}
   th,td{text-align:left;padding:13px 18px;border-bottom:1px solid var(--line);vertical-align:top}
   tr:last-child td{border-bottom:none}
@@ -383,6 +404,55 @@
   .foot a{text-decoration:none;color:var(--muted);transition:color .18s}
   .foot a:hover{color:var(--text)}
   .foot .sp{margin-left:auto}
+
+  /* ---------- tablet ---------- */
+  @media (max-width:900px){
+    section{padding:64px 0}
+    .hero{padding:64px 0 56px}
+    .sec-head{margin-bottom:34px}
+    .term{margin-top:38px}
+  }
+
+  /* ---------- phone ---------- */
+  /* The pipeline SVG needs 720px of its own; below that the list is better. */
+  @media (max-width:900px){
+    .pipe{padding:4px 0;background:none;border:none;overflow:visible}
+    .pipe svg{display:none}
+    .pipe-steps{display:block}
+  }
+
+  @media (max-width:720px){
+    .wrap{padding:0 16px}
+    section{padding:52px 0}
+    .hero{padding:44px 0 48px}
+    .hero::after{background-size:48px 48px}
+    .hero h1{margin-bottom:16px}
+    .lede{margin-bottom:24px}
+    .cta{gap:10px;margin-bottom:26px}
+    .btn{flex:1 1 auto;justify-content:center}
+    .sec-head{margin-bottom:28px}
+    .grid{gap:12px}
+    .card{padding:20px}
+    .term{margin-top:30px;border-radius:12px}
+    .term-body{padding:16px 14px;font-size:.78rem;line-height:1.8}
+    .pipe-note{margin-top:28px;gap:18px}
+    .step{padding:20px 18px}
+    pre{font-size:.76rem;padding:12px 14px}
+    .copy{opacity:1}
+    .close-box{padding:40px 22px;border-radius:14px}
+    .sheet-head{padding:18px 18px 12px}
+    .sheet-body{padding:16px 18px 22px}
+    .foot{gap:10px;font-size:.82rem}
+    .foot .sp{margin-left:0;width:100%;height:0}
+  }
+
+  /* ---------- small phone ---------- */
+  @media (max-width:430px){
+    .nav-links a{padding:7px 8px;font-size:.86rem}
+    .chip{font-size:.7rem;padding:4px 9px}
+    .cta{flex-direction:column;align-items:stretch}
+    .btn{width:100%}
+  }
 
   @media (prefers-reduced-motion:reduce){
     *{animation:none!important;transition:none!important}
@@ -801,6 +871,17 @@
           <path d="M846 94 H878"/>
         </g>
       </svg>
+
+      <div class="pipe-steps">
+        <ol>
+          <li><strong>Wake word</strong>Microphone, clap detection and voice activity detection decide when she is being spoken to.</li>
+          <li><strong>Speech to text</strong>Whisper or Vosk transcribes locally, on real speech only.</li>
+          <li><strong>Intent router</strong>Grammar matching and reference resolution work out what you meant.</li>
+          <li><strong>Local model, skills, agent or vision</strong>The request fans out to whichever subsystem can answer it.</li>
+          <li><strong>Compose</strong>The answer is deliberated over and self-checked before it is given.</li>
+          <li><strong>Voice and card</strong>A short spoken reply through edge-tts, with the full answer on screen.</li>
+        </ol>
+      </div>
     </div>
 
     <div class="pipe-note">
