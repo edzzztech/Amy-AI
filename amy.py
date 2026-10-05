@@ -568,8 +568,13 @@ if HAS_QT:
         live mic level, spins slowly when idle.
         """
         SIZE = 236
-        SEGMENTS = 24
+        # Shared with the main window's orb and the project site.
         ACCENT = (94, 234, 212)
+        ACCENT_2 = (167, 139, 250)
+        ACCENT_3 = (109, 72, 206)
+        MUTED = (140, 146, 166)
+        MUTED_DEEP = (88, 94, 112)
+        MUTED_SHADE = (56, 60, 74)
         opened = QtCore.pyqtSignal()
         vision = QtCore.pyqtSignal()
         hidden_by_user = QtCore.pyqtSignal()
@@ -646,55 +651,73 @@ if HAS_QT:
             W = self.width()
             cx = cy = W / 2.0
             R = W * 0.36
-            accent = QtGui.QColor(100, 116, 139) if muted else QtGui.QColor(*self.ACCENT)
+            # Same mark as the main window: a circle filled with a teal-to-violet
+            # gradient and two counter-moving currents. No segmented ring, no
+            # wordmark — the sphere is the logo.
+            hi = QtGui.QColor(*(self.MUTED if muted else self.ACCENT))
+            body = QtGui.QColor(*(self.MUTED_DEEP if muted else self.ACCENT_2))
+            deep = QtGui.QColor(*(self.MUTED_SHADE if muted else self.ACCENT_3))
 
-            glow = QtGui.QRadialGradient(cx, cy, R * 1.38)
-            c0 = QtGui.QColor(accent)
-            c0.setAlpha(18 if muted else min(255, int(255 * (0.10 + 0.30 * lvl + 0.25 * self.flash))))
-            c1 = QtGui.QColor(accent)
-            c1.setAlpha(0)
-            glow.setColorAt(0.55, c0)
-            glow.setColorAt(1.0, c1)
+            core_r = R * (0.84 + 0.07 * lvl + 0.08 * self.flash)
             p.setPen(QtCore.Qt.NoPen)
+
+            # Halo, clamped inside the widget so it fades out rather than clipping.
+            halo_r = min(core_r * 1.8, W * 0.495)
+            glow = QtGui.QRadialGradient(cx, cy, halo_r)
+            g0 = QtGui.QColor(hi)
+            g0.setAlphaF(0.07 if muted else min(1.0, 0.18 + 0.30 * lvl + 0.26 * self.flash))
+            g1 = QtGui.QColor(body)
+            g1.setAlphaF(0.04 if muted else min(1.0, 0.10 + 0.18 * lvl))
+            g2 = QtGui.QColor(body)
+            g2.setAlpha(0)
+            glow.setColorAt(core_r / halo_r * 0.9, g0)
+            glow.setColorAt(0.72, g1)
+            glow.setColorAt(1.0, g2)
             p.setBrush(QtGui.QBrush(glow))
-            p.drawEllipse(QtCore.QPointF(cx, cy), R * 1.38, R * 1.38)
+            p.drawEllipse(QtCore.QPointF(cx, cy), halo_r, halo_r)
 
-            core_r = R * (0.80 + 0.03 * lvl)
-            disc = QtGui.QRadialGradient(cx, cy - core_r * 0.3, core_r * 1.3)
-            disc.setColorAt(0.0, QtGui.QColor(52, 55, 57, 215))
-            disc.setColorAt(1.0, QtGui.QColor(24, 27, 29, 205))
-            p.setBrush(QtGui.QBrush(disc))
-            p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 22), 1.0))
-            p.drawEllipse(QtCore.QPointF(cx, cy), core_r, core_r)
+            # Everything else paints inside the circle, so its edge is the only one.
+            clip = QtGui.QPainterPath()
+            clip.addEllipse(QtCore.QPointF(cx, cy), core_r, core_r)
+            p.save()
+            p.setClipPath(clip)
+            box = QtCore.QRectF(cx - core_r * 1.6, cy - core_r * 1.6, core_r * 3.2, core_r * 3.2)
 
-            n = self.SEGMENTS
-            step = _math.tau / n
-            gap = _math.radians(0.9)
-            thick = W * 0.024 + W * 0.014 * lvl
-            head = self.angle * 2.2
-            p.setBrush(QtCore.Qt.NoBrush)
-            for i in range(n):
-                a0 = self.angle + i * step
-                ripple = 0.5 + 0.5 * _math.sin(i * 1.9 + t * 7.0) * _math.sin(i * 0.7 - t * 3.1)
-                r = R * (1.0 + 0.11 * lvl * (0.45 + 0.55 * ripple))
-                sweep = max(0.0, _math.cos((a0 + step / 2) - head)) ** 6
-                a = 0.5 if muted else 0.55 + 0.45 * sweep
-                col = QtGui.QColor(accent)
-                col.setAlphaF(min(1.0, a + 0.4 * self.flash))
-                pen = QtGui.QPen(col, thick)
-                pen.setCapStyle(QtCore.Qt.FlatCap)
-                p.setPen(pen)
-                rect = QtCore.QRectF(cx - r, cy - r, 2 * r, 2 * r)
-                p.drawArc(rect, int(-_math.degrees(a0 + gap / 2) * 16),
-                          int(-_math.degrees(step - gap) * 16))
+            drift = t * 0.38
+            ox = cx + core_r * (-0.36 + 0.11 * _math.cos(drift))
+            oy = cy + core_r * (-0.40 + 0.10 * _math.sin(drift * 1.17))
+            mid = 0.72 + 0.08 * _math.sin(t * 0.52)
+            sphere = QtGui.QRadialGradient(ox, oy, core_r * 1.62)
+            sphere.setColorAt(0.0, hi)
+            sphere.setColorAt(max(0.12, mid - 0.38), hi)
+            sphere.setColorAt(mid, body)
+            sphere.setColorAt(1.0, deep)
+            p.setBrush(QtGui.QBrush(sphere))
+            p.drawRect(box)
 
-            p.setPen(QtGui.QColor(255, 255, 255, 235))
-            f = QtGui.QFont("Segoe UI")
-            f.setPixelSize(int(W * 0.13))
-            f.setWeight(QtGui.QFont.Light)
-            f.setLetterSpacing(QtGui.QFont.PercentageSpacing, 106)
-            p.setFont(f)
-            p.drawText(QtCore.QRectF(0, cy - W * 0.11, W, W * 0.2), QtCore.Qt.AlignCenter, "AMY")
+            def current(px, py, rad, colour, alpha):
+                grad = QtGui.QRadialGradient(px, py, max(1.0, rad))
+                a = QtGui.QColor(colour)
+                a.setAlphaF(min(1.0, alpha))
+                b = QtGui.QColor(colour)
+                b.setAlpha(0)
+                grad.setColorAt(0.0, a)
+                grad.setColorAt(1.0, b)
+                p.setBrush(QtGui.QBrush(grad))
+                p.drawRect(box)
+
+            current(cx + core_r * 0.34 * _math.cos(-drift * 0.72 + 2.1),
+                    cy + core_r * 0.34 * _math.sin(-drift * 0.72 + 2.1),
+                    core_r * (0.9 + 0.3 * lvl), hi, 0.05 if muted else 0.20 + 0.22 * lvl)
+            current(cx + core_r * 0.40 * _math.cos(drift * 1.31 + 4.2),
+                    cy + core_r * 0.40 * _math.sin(drift * 1.31 + 4.2),
+                    core_r * (0.7 + 0.35 * lvl), body, 0.04 if muted else 0.18 + 0.20 * lvl)
+            current(cx + core_r * 0.42 * _math.cos(self.angle * 0.6),
+                    cy + core_r * 0.42 * _math.sin(self.angle * 0.6),
+                    core_r * 0.85, QtGui.QColor(255, 255, 255),
+                    0.02 if muted else 0.05 + 0.08 * lvl)
+            p.restore()
+
             caption = {"listening": "Listening", "wake": "Yes?", "speaking": "Speaking",
                        "thinking": "Thinking", "muted": "Muted"}.get(self.state, "")
             if self.heard and t < self.heard_until:
@@ -703,10 +726,12 @@ if HAS_QT:
                 f2 = QtGui.QFont("Segoe UI")
                 f2.setPixelSize(max(9, int(W * 0.048)))
                 p.setFont(f2)
-                p.setPen(QtGui.QColor(207, 250, 254, 190))
+                p.setPen(QtGui.QColor(232, 234, 242, 210))
                 text = QtGui.QFontMetrics(f2).elidedText(caption, QtCore.Qt.ElideRight,
-                                                         int(core_r * 1.5))
-                p.drawText(QtCore.QRectF(0, cy + W * 0.075, W, W * 0.08),
+                                                         int(W * 0.86))
+                # Below the sphere now — it used to sit on the dark disc that
+                # the gradient replaced, where it would be unreadable.
+                p.drawText(QtCore.QRectF(0, cy + core_r + W * 0.02, W, W * 0.09),
                            QtCore.Qt.AlignCenter, text)
             p.end()
 
@@ -4666,7 +4691,6 @@ HTML_UI = r"""
   const MUTED = [140, 146, 166];
   const MUTED_DEEP = [88, 94, 112];
   const MUTED_SHADE = [56, 60, 74];
-  const SEGMENTS = 24;
   const TAU = Math.PI * 2;
 
   let target = 0, level = 0, angle = 0, flash = 0, last = 0;
