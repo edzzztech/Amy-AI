@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amy AI</title>
+<meta name="description" content="A local-first voice assistant for Windows. Sees your screen, controls your apps, models CAD parts, and runs entirely on your own machine.">
+<style>
+  :root{
+    --bg:#07080c;
+    --bg-soft:#0b0d14;
+    --surface:#0e1017;
+    --surface-2:#13161f;
+    --line:rgba(255,255,255,.09);
+    --line-strong:rgba(255,255,255,.16);
+    --text:#e8eaf2;
+    --muted:#8c92a6;
+    --accent:#5eead4;
+    --accent-2:#a78bfa;
+    --accent-ink:#04221d;
+    --glow:rgba(94,234,212,.16);
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    --radius:14px;
+    --maxw:1120px;
+  }
+  :root[data-theme="light"]{
+    --bg:#fbfbfa;
+    --bg-soft:#f4f4f2;
+    --surface:#ffffff;
+    --surface-2:#f6f6f4;
+    --line:rgba(0,0,0,.10);
+    --line-strong:rgba(0,0,0,.18);
+    --text:#15171c;
+    --muted:#5c6170;
+    --accent:#0d9488;
+    --accent-2:#7c3aed;
+    --accent-ink:#ffffff;
+    --glow:rgba(13,148,136,.12);
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#fbfbfa;
+      --bg-soft:#f4f4f2;
+      --surface:#ffffff;
+      --surface-2:#f6f6f4;
+      --line:rgba(0,0,0,.10);
+      --line-strong:rgba(0,0,0,.18);
+      --text:#15171c;
+      --muted:#5c6170;
+      --accent:#0d9488;
+      --accent-2:#7c3aed;
+      --accent-ink:#ffffff;
+      --glow:rgba(13,148,136,.12);
+    }
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    font-size:16px;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  a{color:inherit}
+  h1,h2,h3{line-height:1.15;letter-spacing:-.02em;margin:0}
+  p{margin:0}
+  code{font-family:var(--mono);font-size:.875em}
+
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 20px}
+  .eyebrow{
+    font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--accent);margin-bottom:14px;
+  }
+  .muted{color:var(--muted)}
+
+  /* ---------- nav ---------- */
+  header{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:blur(14px);
+    background:color-mix(in srgb, var(--bg) 78%, transparent);
+    border-bottom:1px solid transparent;
+    transition:border-color .25s ease, background .25s ease;
+  }
+  header.stuck{border-bottom-color:var(--line)}
+  .nav{display:flex;align-items:center;gap:10px;height:62px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:650;letter-spacing:-.02em;text-decoration:none;font-size:1.02rem}
+  .orb{
+    width:22px;height:22px;border-radius:50%;flex:none;
+    background:radial-gradient(circle at 32% 30%, var(--accent), var(--accent-2) 72%);
+    box-shadow:0 0 0 3px var(--glow);
+  }
+  .nav-links{display:flex;gap:4px;margin-left:auto;align-items:center}
+  .nav-links a{
+    text-decoration:none;color:var(--muted);font-size:.9rem;
+    padding:7px 11px;border-radius:8px;transition:color .18s,background .18s;
+  }
+  .nav-links a:hover{color:var(--text);background:var(--surface-2)}
+  .icon-btn{
+    display:grid;place-items:center;width:34px;height:34px;flex:none;
+    border:1px solid var(--line);border-radius:9px;background:transparent;
+    color:var(--muted);cursor:pointer;transition:color .18s,border-color .18s;
+  }
+  .icon-btn:hover{color:var(--text);border-color:var(--line-strong)}
+  @media (max-width:760px){ .nav-links a.hide-sm{display:none} }
+
+  /* ---------- buttons ---------- */
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:11px 19px;border-radius:10px;text-decoration:none;
+    font-size:.93rem;font-weight:580;border:1px solid transparent;
+    transition:transform .15s ease, box-shadow .2s ease, background .2s ease, border-color .2s ease;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:var(--accent);color:var(--accent-ink);box-shadow:0 6px 24px -8px var(--accent)}
+  .btn-primary:hover{box-shadow:0 10px 30px -8px var(--accent)}
+  .btn-ghost{border-color:var(--line-strong);color:var(--text)}
+  .btn-ghost:hover{background:var(--surface-2)}
+
+  /* ---------- hero ---------- */
+  .hero{position:relative;padding:90px 0 72px;overflow:hidden}
+  .hero::before{
+    content:"";position:absolute;inset:-30% -10% auto;height:620px;
+    background:radial-gradient(60% 60% at 50% 0%, var(--glow), transparent 70%);
+    pointer-events:none;
+  }
+  .hero::after{
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size:64px 64px;
+    mask-image:radial-gradient(70% 55% at 50% 10%, #000, transparent 75%);
+    -webkit-mask-image:radial-gradient(70% 55% at 50% 10%, #000, transparent 75%);
+  }
+  .hero .wrap{position:relative;z-index:1}
+  .hero h1{
+    font-size:clamp(2.6rem,7vw,4.5rem);font-weight:700;
+    margin-bottom:20px;max-width:17ch;
+  }
+  .hero h1 em{
+    font-style:normal;
+    background:linear-gradient(100deg,var(--accent),var(--accent-2));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .lede{font-size:clamp(1.02rem,2.2vw,1.2rem);color:var(--muted);max-width:60ch;margin-bottom:30px}
+  .cta{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:34px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{
+    font-family:var(--mono);font-size:.74rem;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:5px 11px;
+    background:var(--surface);
+  }
+
+  /* ---------- terminal ---------- */
+  .term{
+    margin-top:52px;border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--surface);overflow:hidden;
+    box-shadow:0 30px 70px -40px rgba(0,0,0,.7);
+  }
+  .term-bar{
+    display:flex;align-items:center;gap:7px;padding:11px 14px;
+    border-bottom:1px solid var(--line);background:var(--surface-2);
+  }
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--line-strong)}
+  .term-title{margin-left:8px;font-family:var(--mono);font-size:.74rem;color:var(--muted)}
+  .term-body{padding:20px 18px;font-family:var(--mono);font-size:.84rem;line-height:1.95;overflow-x:auto}
+  .term-body .u{color:var(--accent-2)}
+  .term-body .a{color:var(--accent)}
+  .term-body .c{color:var(--muted)}
+  .term-body div{white-space:pre-wrap}
+
+  /* ---------- sections ---------- */
+  section{padding:84px 0;position:relative}
+  .sec-head{max-width:62ch;margin-bottom:46px}
+  .sec-head h2{font-size:clamp(1.7rem,4vw,2.5rem);font-weight:680;margin-bottom:14px}
+  .sec-head p{color:var(--muted);font-size:1.02rem}
+  .alt{background:var(--bg-soft);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+
+  /* ---------- feature grid ---------- */
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(272px,1fr))}
+  .card{
+    border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--surface);padding:24px;
+    transition:border-color .2s ease, transform .2s ease;
+  }
+  .card:hover{border-color:var(--line-strong);transform:translateY(-2px)}
+  .card .ico{
+    width:38px;height:38px;border-radius:10px;display:grid;place-items:center;
+    background:var(--surface-2);border:1px solid var(--line);color:var(--accent);
+    margin-bottom:16px;
+  }
+  .card h3{font-size:1.04rem;font-weight:620;margin-bottom:8px}
+  .card p{color:var(--muted);font-size:.92rem}
+
+  /* ---------- pipeline ---------- */
+  .pipe{
+    border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--surface);padding:30px 22px;overflow-x:auto;
+  }
+  .pipe svg{display:block;min-width:720px;margin:0 auto;max-width:100%;height:auto}
+  .pipe-note{
+    display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    margin-top:26px;
+  }
+  .pipe-note div{font-size:.9rem;color:var(--muted)}
+  .pipe-note strong{display:block;color:var(--text);font-weight:600;margin-bottom:3px;font-size:.94rem}
+
+  /* ---------- steps ---------- */
+  .steps{display:grid;gap:20px;counter-reset:s}
+  .step{
+    border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--surface);padding:22px 24px;
+  }
+  .step-top{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .step-n{
+    counter-increment:s;flex:none;width:26px;height:26px;border-radius:7px;
+    display:grid;place-items:center;font-family:var(--mono);font-size:.78rem;
+    background:var(--accent);color:var(--accent-ink);font-weight:600;
+  }
+  .step-n::before{content:counter(s)}
+  .step h3{font-size:1rem;font-weight:620}
+  .step > p{color:var(--muted);font-size:.92rem;margin-bottom:14px}
+  pre{
+    margin:0;background:var(--surface-2);border:1px solid var(--line);
+    border-radius:10px;padding:14px 16px;overflow-x:auto;
+    font-family:var(--mono);font-size:.82rem;line-height:1.75;
+  }
+  pre .cm{color:var(--muted)}
+  .pre-wrap{position:relative}
+  .copy{
+    position:absolute;top:8px;right:8px;border:1px solid var(--line);
+    background:var(--surface);color:var(--muted);border-radius:7px;
+    font-family:var(--mono);font-size:.7rem;padding:4px 9px;cursor:pointer;
+    opacity:0;transition:opacity .18s, color .18s;
+  }
+  .pre-wrap:hover .copy{opacity:1}
+  .copy:hover{color:var(--text)}
+
+  /* ---------- config table ---------- */
+  .tbl{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+  table{width:100%;border-collapse:collapse;font-size:.9rem}
+  th,td{text-align:left;padding:13px 18px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  th{
+    font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);background:var(--surface-2);font-weight:500;
+  }
+  td code{color:var(--accent);background:var(--surface-2);padding:2px 6px;border-radius:5px;white-space:nowrap}
+  td:last-child{color:var(--muted)}
+  @media (max-width:640px){
+    th:nth-child(2),td:nth-child(2){display:none}
+  }
+
+  /* ---------- closing ---------- */
+  .close-box{
+    border:1px solid var(--line);border-radius:18px;
+    background:
+      radial-gradient(80% 120% at 50% 0%, var(--glow), transparent 68%),
+      var(--surface);
+    padding:56px 28px;text-align:center;
+  }
+  .close-box h2{font-size:clamp(1.6rem,4vw,2.3rem);font-weight:680;margin-bottom:14px}
+  .close-box p{color:var(--muted);max-width:50ch;margin:0 auto 28px}
+  .close-box .cta{justify-content:center;margin-bottom:0}
+
+  footer{border-top:1px solid var(--line);padding:34px 0;font-size:.86rem;color:var(--muted)}
+  .foot{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .foot a{text-decoration:none;color:var(--muted);transition:color .18s}
+  .foot a:hover{color:var(--text)}
+  .foot .sp{margin-left:auto}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+    html{scroll-behavior:auto}
+  }
+</style>
+</head>
+<body>
+
+<header id="top-bar">
+  <div class="wrap nav">
+    <a class="brand" href="#"><span class="orb"></span>Amy</a>
+    <nav class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how" class="hide-sm">How it works</a>
+      <a href="#start">Setup</a>
+      <a href="#config" class="hide-sm">Config</a>
+      <button class="icon-btn" id="theme-btn" aria-label="Toggle colour theme" title="Toggle theme">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+        </svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<!-- ============ HERO ============ -->
+<div class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Local-first desktop assistant</div>
+    <h1>Your computer, <em>talked to</em>.</h1>
+    <p class="lede">
+      Amy is a voice assistant that runs on your own machine. She hears you across the room,
+      looks at whatever is on your screen, drives your apps for you, and models real CAD parts —
+      with the language models running locally through Ollama, so nothing is shipped off to an API.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#start">
+        Get started
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/edzzztech/Amy-AI" id="repo-link-hero">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-2.91-.88-2.91-2.84 0-.56.2-1.02.52-1.38-.05-.13-.23-.65.05-1.35 0 0 .54-.17 1.77.66a4.9 4.9 0 0 1 2.61 0c1.23-.84 1.77-.66 1.77-.66.28.7.1 1.22.05 1.35.32.36.52.82.52 1.38 0 1.97-1.14 2.64-2.92 2.84.3.26.56.76.56 1.54 0 1.11-.01 2.01-.01 2.29 0 .21.15.46.55.38A7.99 7.99 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        View source
+      </a>
+    </div>
+    <div class="chips">
+      <span class="chip">Python + PyQt5</span>
+      <span class="chip">Ollama</span>
+      <span class="chip">No API keys</span>
+      <span class="chip">Offline speech</span>
+      <span class="chip">Windows</span>
+    </div>
+
+    <div class="term">
+      <div class="term-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="term-title">amy — listening</span>
+      </div>
+      <div class="term-body">
+<div><span class="u">you</span>  Amy, what am I looking at?</div>
+<div><span class="a">amy</span>  A pull request diff, Sir — three files, mostly the audio engine.<span class="c">
+       The failing test is in the barge-in handler.</span></div>
+<div><span class="u">you</span>  Model me a hinged enclosure, 80 by 50 by 30 millimetres.</div>
+<div><span class="a">amy</span>  Built and checked. STEP exported to amy_data/cad. <span class="c">[preview]</span></div>
+<div><span class="u">you</span>  Email that to me and put the kettle playlist on.</div>
+<div><span class="a">amy</span>  Sent. Spotify resuming — <span class="c">anything else?</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FEATURES ============ -->
+<section id="features" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Capabilities</div>
+      <h2>Not a chatbot in a window</h2>
+      <p>
+        Amy has hands, eyes and ears on the machine she runs on. Every subsystem below is
+        part of the same process — one wake word reaches all of them.
+      </p>
+    </div>
+    <div class="grid">
+
+      <div class="card">
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></div>
+        <h3>Full-duplex voice</h3>
+        <p>She listens while she speaks. Interrupt her mid-sentence and she stops — barge-in is voice-activated, with a clap as a backup wake signal.</p>
+      </div>
+
+      <div class="card">
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <h3>Screen awareness</h3>
+        <p>A vision model reads your actual display on an interval. Ask what's on screen, what an error means, or what that dialog is asking for.</p>
+      </div>
+
+      <div class="card">
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7"/></svg></div>
+        <h3>Computer control</h3>
+        <p>An agent that finds and drives real applications through UI automation — opening, clicking, typing. Risky steps wait for your approval first.</p>
+      </div>
+
+      <div class="card">
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+        <h3>Real CAD, not meshes</h3>
+        <p>CadQuery builds exact B-rep solids — hinged assemblies, tolerances, STEP export — then a visual check confirms the part came out as described.</p>
+      </div>
+
+      <div class="card">
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/></svg></div>
+        <h3>Desk camera &amp; gestures</h3>
+        <p>Point the webcam at something and ask what it is. Hand gestures map to actions — open palm pauses media, fist mutes, peace skips the track.</p>
+      </div>
+
+      <div class="card">
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3.2"/></svg></div>
+        <h3>Proactive engine</h3>
+        <p>She thinks on a timer, watches folders for new files, and raises things worth raising — rate-limited, and silent during quiet hours.</p>
+      </div>
+
+      <div class="card">
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h11l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 8h6M8 12h8M8 16h5"/></svg></div>
+        <h3>Memory that persists</h3>
+        <p>Transcripts, a knowledge base and learned skills live on disk in <code>amy_data</code>, watched for changes and recalled in later conversations.</p>
+      </div>
+
+      <div class="card">
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div>
+        <h3>Model routing</h3>
+        <p>Separate local models for fast replies, reasoning, code, CAD and vision. Auto-select picks the right one per request instead of one model for everything.</p>
+      </div>
+
+      <div class="card">
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12V7a7 7 0 0 1 14 0v5"/><rect x="3" y="12" width="18" height="9" rx="2"/></svg></div>
+        <h3>Everything stays home</h3>
+        <p>Inference runs against localhost. Mail, messaging and smart-home integrations are opt-in, and credentials live only in your own config file.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW ============ -->
+<section id="how">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Architecture</div>
+      <h2>One pass, wake word to voice</h2>
+      <p>What happens between you saying “Amy” and hearing an answer back.</p>
+    </div>
+
+    <div class="pipe">
+      <svg viewBox="0 0 980 190" role="img" aria-label="Pipeline: microphone to speech recognition to intent router to models and skills, then back out through neural speech and the on-screen card.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+          </marker>
+          <linearGradient id="gr" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="var(--accent)"/>
+            <stop offset="100%" stop-color="var(--accent-2)"/>
+          </linearGradient>
+        </defs>
+
+        <g font-family="var(--mono)" font-size="11.5" text-anchor="middle">
+          <!-- row 1 -->
+          <g>
+            <rect x="8"   y="22" width="132" height="52" rx="9" fill="var(--surface-2)" stroke="var(--line-strong)"/>
+            <text x="74"  y="43" fill="var(--text)">wake word</text>
+            <text x="74"  y="60" fill="var(--muted)">mic · clap · VAD</text>
+          </g>
+          <g>
+            <rect x="178" y="22" width="132" height="52" rx="9" fill="var(--surface-2)" stroke="var(--line-strong)"/>
+            <text x="244" y="43" fill="var(--text)">speech → text</text>
+            <text x="244" y="60" fill="var(--muted)">whisper / vosk</text>
+          </g>
+          <g>
+            <rect x="348" y="14" width="150" height="68" rx="9" fill="none" stroke="url(#gr)" stroke-width="1.6"/>
+            <text x="423" y="38" fill="var(--text)">intent router</text>
+            <text x="423" y="55" fill="var(--muted)">grammar match</text>
+            <text x="423" y="71" fill="var(--muted)">+ reference resolve</text>
+          </g>
+
+          <!-- fan out -->
+          <g>
+            <rect x="542" y="2"   width="146" height="40" rx="8" fill="var(--surface-2)" stroke="var(--line)"/>
+            <text x="615" y="26" fill="var(--text)">local model</text>
+          </g>
+          <g>
+            <rect x="542" y="50"  width="146" height="40" rx="8" fill="var(--surface-2)" stroke="var(--line)"/>
+            <text x="615" y="74" fill="var(--text)">skills &amp; plugins</text>
+          </g>
+          <g>
+            <rect x="542" y="98"  width="146" height="40" rx="8" fill="var(--surface-2)" stroke="var(--line)"/>
+            <text x="615" y="122" fill="var(--text)">computer agent</text>
+          </g>
+          <g>
+            <rect x="542" y="146" width="146" height="40" rx="8" fill="var(--surface-2)" stroke="var(--line)"/>
+            <text x="615" y="170" fill="var(--text)">vision · CAD</text>
+          </g>
+
+          <!-- converge -->
+          <g>
+            <rect x="726" y="50" width="120" height="88" rx="9" fill="none" stroke="url(#gr)" stroke-width="1.6"/>
+            <text x="786" y="82" fill="var(--text)">compose</text>
+            <text x="786" y="99" fill="var(--muted)">deliberate</text>
+            <text x="786" y="115" fill="var(--muted)">self-check</text>
+          </g>
+          <g>
+            <rect x="884" y="50" width="88" height="88" rx="9" fill="var(--surface-2)" stroke="var(--line-strong)"/>
+            <text x="928" y="82" fill="var(--text)">voice</text>
+            <text x="928" y="99" fill="var(--muted)">edge-tts</text>
+            <text x="928" y="115" fill="var(--muted)">+ card</text>
+          </g>
+        </g>
+
+        <g stroke="var(--muted)" stroke-width="1.3" fill="none" marker-end="url(#ar)" opacity=".75">
+          <path d="M140 48 H172"/>
+          <path d="M310 48 H342"/>
+          <path d="M498 48 C520 48 520 22 536 22"/>
+          <path d="M498 48 C520 48 520 70 536 70"/>
+          <path d="M498 48 C522 48 518 118 536 118"/>
+          <path d="M498 48 C524 48 516 166 536 166"/>
+          <path d="M688 22  C710 22 704 94 720 94"/>
+          <path d="M688 70  C708 70 706 94 720 94"/>
+          <path d="M688 118 C708 118 706 94 720 94"/>
+          <path d="M688 166 C710 166 704 94 720 94"/>
+          <path d="M846 94 H878"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="pipe-note">
+      <div><strong>Always listening, cheaply</strong>Voice activity detection gates the expensive stages, so the transcriber only runs on real speech.</div>
+      <div><strong>Grammar before guessing</strong>Confident phrase matches execute directly; borderline ones get a clarifying question instead of a wrong action.</div>
+      <div><strong>Approval gates</strong>Anything classified as risky pauses for a yes, with a timeout that defaults to declining.</div>
+      <div><strong>Spoken replies stay short</strong>The full answer lands on the on-screen card; the voice gets the summary.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ START ============ -->
+<section id="start" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Setup</div>
+      <h2>Running in four steps</h2>
+      <p>Windows, Python 3.10 or newer, and a machine with enough headroom to host a local model.</p>
+    </div>
+
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-top"><span class="step-n"></span><h3>Clone and install</h3></div>
+        <p>CadQuery and OpenCV are heavy, but they're imported lazily — nothing loads until you ask for CAD or the camera.</p>
+        <div class="pre-wrap"><button class="copy">copy</button><pre>git clone https://github.com/edzzztech/Amy-AI.git
+cd Amy-AI
+pip install -r requirements.txt</pre></div>
+      </div>
+
+      <div class="step">
+        <div class="step-top"><span class="step-n"></span><h3>Pull the local models</h3></div>
+        <p>Install <a href="https://ollama.com" style="color:var(--accent)">Ollama</a>, then pull a chat model, a vision model and an embedding model. Amy can start the Ollama server herself on launch.</p>
+        <div class="pre-wrap"><button class="copy">copy</button><pre>ollama pull llama3.2          <span class="cm"># conversation + reasoning</span>
+ollama pull llava             <span class="cm"># screen and camera vision</span>
+ollama pull nomic-embed-text  <span class="cm"># memory search</span></pre></div>
+      </div>
+
+      <div class="step">
+        <div class="step-top"><span class="step-n"></span><h3>Fill in your config</h3></div>
+        <p>Open <code>amy_config.json</code> and replace the placeholders. Everything is optional except the Ollama block — skip any integration you don't want and that feature simply stays quiet.</p>
+        <div class="pre-wrap"><button class="copy">copy</button><pre>"assistant": {
+  "wake_word": "amy",
+  "user_title": "Sir",
+  "default_city": "London",
+  "neural_voice": "en-GB-SoniaNeural"
+}</pre></div>
+      </div>
+
+      <div class="step">
+        <div class="step-top"><span class="step-n"></span><h3>Say hello</h3></div>
+        <p>She greets you on launch, then waits for the wake word. Say “Amy, what can you do?” to hear the current skill list.</p>
+        <div class="pre-wrap"><button class="copy">copy</button><pre>python amy.py</pre></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONFIG ============ -->
+<section id="config">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Configuration</div>
+      <h2>Worth knowing about</h2>
+      <p>
+        <code>amy_config.json</code> holds every key and tunable — nothing is hard-coded in the source.
+        These are the settings most worth changing first.
+      </p>
+    </div>
+
+    <div class="tbl">
+      <table>
+        <thead>
+          <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>assistant.wake_word</code></td><td><code>amy</code></td><td>What she answers to. Pick something that doesn't collide with your normal speech.</td></tr>
+          <tr><td><code>assistant.neural_voice</code></td><td><code>en-GB-SoniaNeural</code></td><td>Any Microsoft Edge neural voice. Free, no key, and far better than system TTS.</td></tr>
+          <tr><td><code>assistant.barge_in</code></td><td><code>voice</code></td><td>How to interrupt her mid-reply. <code>voice</code> cuts her off as soon as you start talking.</td></tr>
+          <tr><td><code>assistant.automation_approval</code></td><td><code>risky</code></td><td>When to ask before acting. <code>risky</code> gates destructive steps only; <code>all</code> gates everything.</td></tr>
+          <tr><td><code>assistant.allow_shell_commands</code></td><td><code>false</code></td><td>Off by default, deliberately. Turn it on only if you want her running shell commands.</td></tr>
+          <tr><td><code>ollama.auto_select</code></td><td><code>true</code></td><td>Routes each request to the fast, reasoning, code, CAD or vision model automatically.</td></tr>
+          <tr><td><code>ollama.auto_start</code></td><td><code>true</code></td><td>Starts the Ollama server on launch if it isn't already running.</td></tr>
+          <tr><td><code>proactive.level</code></td><td><code>normal</code></td><td>How often she speaks up unprompted, bounded by <code>quiet_hours</code> and <code>max_per_hour</code>.</td></tr>
+          <tr><td><code>camera.start_on_launch</code></td><td><code>false</code></td><td>The webcam stays off until you ask for it. Gestures need it running.</td></tr>
+          <tr><td><code>ui.theme</code></td><td><code>arc</code></td><td>Window theme, plus which controls appear in the bottom bar.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CLOSE ============ -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="close-box">
+      <h2>Have a look at the source</h2>
+      <p>One Python file, no services, no accounts. Clone it, point it at a local model, and talk to your computer.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/edzzztech/Amy-AI" id="repo-link-close">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-2.91-.88-2.91-2.84 0-.56.2-1.02.52-1.38-.05-.13-.23-.65.05-1.35 0 0 .54-.17 1.77.66a4.9 4.9 0 0 1 2.61 0c1.23-.84 1.77-.66 1.77-.66.28.7.1 1.22.05 1.35.32.36.52.82.52 1.38 0 1.97-1.14 2.64-2.92 2.84.3.26.56.76.56 1.54 0 1.11-.01 2.01-.01 2.29 0 .21.15.46.55.38A7.99 7.99 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          Amy on GitHub
+        </a>
+        <a class="btn btn-ghost" href="#start">Read the setup</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <span class="orb" style="width:16px;height:16px;box-shadow:none"></span>
+    <span>Amy AI — a local-first desktop assistant.</span>
+    <span class="sp"></span>
+    <a href="https://github.com/edzzztech/Amy-AI">GitHub</a>
+    <a href="#features">Features</a>
+    <a href="#start">Setup</a>
+  </div>
+</footer>
+
+<script>
+(function(){
+  // sticky nav hairline
+  var bar = document.getElementById('top-bar');
+  var onScroll = function(){ bar.classList.toggle('stuck', window.scrollY > 8); };
+  onScroll();
+  window.addEventListener('scroll', onScroll, {passive:true});
+
+  // theme toggle, remembered per viewer where storage is available
+  var root = document.documentElement;
+  var KEY = 'amy-theme';
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved === 'light' || saved === 'dark') root.setAttribute('data-theme', saved);
+  } catch(e){}
+
+  document.getElementById('theme-btn').addEventListener('click', function(){
+    var dark = matchMedia('(prefers-color-scheme: dark)').matches;
+    var current = root.getAttribute('data-theme') || (dark ? 'dark' : 'light');
+    var next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem(KEY, next); } catch(e){}
+  });
+
+  // copy buttons on code blocks
+  document.querySelectorAll('.pre-wrap').forEach(function(w){
+    var btn = w.querySelector('.copy'), pre = w.querySelector('pre');
+    btn.addEventListener('click', function(){
+      var text = pre.innerText.replace(/[ \t]*#[^\n]*/g, '').trimEnd();
+      navigator.clipboard.writeText(text).then(function(){
+        btn.textContent = 'copied';
+        setTimeout(function(){ btn.textContent = 'copy'; }, 1400);
+      }).catch(function(){ btn.textContent = 'failed'; });
+    });
+  });
+})();
+</script>
+</body>
+</html>

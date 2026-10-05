@@ -1,0 +1,24 @@
+# Amy's runtime state: memory, transcripts, logs, the app index,
+# and anything she generates (CAD, code, documents, backups).
+# Personal to each install — never commit it.
+amy_data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Local backups and scratch copies
+*.bak
+*.orig
+*.rej
+
+# OS / editor noise
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/

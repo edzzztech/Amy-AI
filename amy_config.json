@@ -1,0 +1,189 @@
+{
+    "email": {
+        "smtp_server": "smtp.gmail.com",
+        "smtp_port": 587,
+        "address": "YOUR_EMAIL@gmail.com",
+        "app_password": "YOUR_APP_PASSWORD_HERE",
+        "default_receiver": "YOUR_RECEIVER_EMAIL@gmail.com",
+        "mode": "browser",
+        "auto_send": true
+    },
+    "spotify": {
+        "client_id": "",
+        "client_secret": "",
+        "redirect_uri": "http://127.0.0.1:8888/callback"
+    },
+    "ollama": {
+        "chat_url": "http://localhost:11434/api/chat",
+        "generate_url": "http://localhost:11434/api/generate",
+        "model": "llama3.2",
+        "vision_model": "llava",
+        "embed_model": "nomic-embed-text",
+        "models": {
+            "fast": "",
+            "chat": "",
+            "reasoning": "",
+            "code": "",
+            "cad": "",
+            "vision": ""
+        },
+        "auto_select": true,
+        "auto_start": true,
+        "start_timeout": 45,
+        "stop_on_exit": false
+    },
+    "assistant": {
+        "wake_word": "amy",
+        "user_title": "Sir",
+        "default_city": "London",
+        "voice_rate": 0,
+        "preferred_voice": "",
+        "voice_gender": "female",
+        "neural_voice": "en-GB-SoniaNeural",
+        "neural_rate": "+0%",
+        "neural_pitch": "+0Hz",
+        "speak_greeting": true,
+        "vision_interval": 8,
+        "screen_awareness_on_start": false,
+        "code_model": "",
+        "conversation_timeout": 90,
+        "auto_research": true,
+        "smart_intent": true,
+        "habit_nudges": false,
+        "mic_threshold_ceiling": 1800,
+        "mic_threshold_floor": 120,
+        "response_cache": true,
+        "transcript_repair": true,
+        "announce_background": true,
+        "enable_plugins": true,
+        "allow_shell_commands": false,
+        "persona_note": "",
+        "reply_tokens": 320,
+        "deliberate": true,
+        "self_check": true,
+        "save_interval": 3.0,
+        "transcript_limit": 4000,
+        "kb_limit": 1200,
+        "grammar_matching": true,
+        "grammar_accept": 0.8,
+        "grammar_clarify": 0.62,
+        "stt_engine": "auto",
+        "vosk_model_path": "",
+        "resolve_references": true,
+        "automation_approval": "risky",
+        "approval_timeout": 45,
+        "speak_startup_digest": true,
+        "kb_watch_interval": 120,
+        "pause_threshold": 0.8,
+        "barge_in": "voice",
+        "clap_wake": true,
+        "whisper_model": "small.en",
+        "short_spoken_replies": true,
+        "barge_sensitivity": 1.7,
+        "input_device": "",
+        "max_phrase_seconds": 45,
+        "continuation_listening": true,
+        "max_continuations": 2
+    },
+    "camera": {
+        "device_index": 0,
+        "stream_fps": 12,
+        "capture_width": 1280,
+        "capture_height": 720,
+        "stream_width": 720,
+        "stream_quality": 72,
+        "lens_tokens": 180,
+        "warm_vision": true,
+        "mirror": true,
+        "gestures_enabled": true,
+        "start_on_launch": false
+    },
+    "cad": {
+        "max_attempts": 4,
+        "visual_check": true,
+        "use_templates": true,
+        "engine": "auto",
+        "slicer_path": ""
+    },
+    "gestures": {
+        "open_palm": "pause_media",
+        "fist": "mute",
+        "point_up": "volume_up",
+        "peace": "next_track",
+        "thumbs_up": "screenshot",
+        "shaka": "identify_object",
+        "four": "toggle_conversation"
+    },
+    "home_assistant": {
+        "url": "http://homeassistant.local:8123",
+        "token": "YOUR_LONG_LIVED_ACCESS_TOKEN",
+        "aliases": {
+            "desk lamp": "light.desk_lamp"
+        }
+    },
+    "calendar": {
+        "use_outlook": true,
+        "default_minutes": 30
+    },
+    "custom_commands": {},
+    "proactive": {
+        "level": "normal",
+        "speak": true,
+        "quiet_hours": [
+            23,
+            7
+        ],
+        "max_per_hour": 6,
+        "think_minutes": 12,
+        "watch_folders": [
+            "Downloads",
+            "Videos"
+        ]
+    },
+    "browser": {
+        "headless": false,
+        "max_steps": 12,
+        "step_delay": 1.0,
+        "timeout_ms": 15000
+    },
+    "security": {
+        "scan_interval": 8,
+        "speak_alerts": true,
+        "sentinel_on_start": false
+    },
+    "twilio": {
+        "account_sid": "YOUR_TWILIO_SID",
+        "auth_token": "YOUR_TWILIO_TOKEN",
+        "from_number": "+15550001111"
+    },
+    "phonebook": {
+        "example": "+15555555555"
+    },
+    "sms_gateway": {},
+    "contacts": {
+        "me": "YOUR_RECEIVER_EMAIL@gmail.com"
+    },
+    "ui": {
+        "theme": "arc",
+        "bottom_bar": {
+            "chat": true,
+            "mic": true,
+            "convo": true,
+            "camera": true,
+            "screenlens": true,
+            "calendar": false,
+            "undo": false,
+            "lenshist": false,
+            "detach": false,
+            "overlay": true,
+            "agenda": false,
+            "stop": false,
+            "settings": true
+        },
+        "sounds": true,
+        "sound_volume": 0.6,
+        "sleep_minutes": 10,
+        "show_chat": false,
+        "layout_version": 2
+    }
+}
