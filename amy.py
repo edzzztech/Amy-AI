@@ -3391,6 +3391,198 @@ class PushToTalk:
         except Exception as e:
             log_debug(f"push-to-talk loop failed: {e}")
 
+
+class RemoteBridge:
+    """A small HTTP endpoint so the phone can drive this machine.
+
+    Security stance, because this opens a port on a personal computer:
+
+      - **Off by default.** Nothing listens until it is deliberately enabled.
+      - **A shared secret is required** on every request. It is generated once,
+        stored in the config, and shown as a pairing code.
+      - **Local network only.** It binds to the LAN address, never to a public
+        interface, and refuses requests whose source is not a private address.
+      - **Everything is logged** to the action log as a remote command, so a
+        phone cannot quietly do things you have no record of.
+
+    It is deliberately a few endpoints rather than a general RPC surface: the
+    phone can ask for status, send a command, and nothing else.
+    """
+
+    PRIVATE_PREFIXES = ("10.", "192.168.", "127.", "169.254.", "::1")
+
+    def __init__(self, app):
+        self.app = app
+        self.server = None
+        self.thread = None
+
+    # --- config ----------------------------------------------------------
+    @staticmethod
+    def cfg():
+        return CONFIG.setdefault("remote", {})
+
+    @classmethod
+    def token(cls):
+        """The pairing secret, created on first use."""
+        c = cls.cfg()
+        if not c.get("token"):
+            import secrets
+            c["token"] = secrets.token_urlsafe(18)
+            save_config(CONFIG)
+        return c["token"]
+
+    @staticmethod
+    def lan_address():
+        """This machine's address on the local network."""
+        import socket
+        try:
+            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            probe.settimeout(0.3)
+            probe.connect(("10.255.255.255", 1))   # no packets are sent
+            addr = probe.getsockname()[0]
+            probe.close()
+            return addr
+        except Exception:
+            return "127.0.0.1"
+
+    @classmethod
+    def _is_private(cls, addr):
+        return str(addr).startswith(cls.PRIVATE_PREFIXES)
+
+    # --- lifecycle -------------------------------------------------------
+    def start(self, announce=True):
+        if self.server is not None:
+            if announce:
+                self.speak_address()
+            return True
+        try:
+            from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+        except ImportError:
+            self.app.speak("This Python is too old for the remote bridge, Sir.")
+            return False
+
+        bridge = self
+        port = int(self.cfg().get("port", 8765))
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, fmt, *args):
+                log_debug("remote: " + (fmt % args))
+
+            def _reject(self, code, why):
+                payload = json.dumps({"ok": False, "error": why}).encode()
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def _ok(self, data):
+                payload = json.dumps(data).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def _authorised(self):
+                if not bridge._is_private(self.client_address[0]):
+                    self._reject(403, "local network only")
+                    return False
+                if self.headers.get("X-Amy-Token", "") != RemoteBridge.token():
+                    self._reject(401, "bad pairing code")
+                    return False
+                return True
+
+            def do_GET(self):
+                if self.path.rstrip("/") == "/status":
+                    if not self._authorised():
+                        return
+                    self._ok({
+                        "ok": True,
+                        "name": "Amy",
+                        "listening": bool(getattr(bridge.app, "mic_enabled", True)),
+                        "speaking": bool(getattr(bridge.app, "is_speaking", False)),
+                        "camera": bool(getattr(bridge.app, "camera_active", False)),
+                    })
+                else:
+                    self._reject(404, "no such endpoint")
+
+            def do_POST(self):
+                if self.path.rstrip("/") != "/command":
+                    self._reject(404, "no such endpoint")
+                    return
+                if not self._authorised():
+                    return
+                try:
+                    length = int(self.headers.get("Content-Length", 0))
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                except Exception:
+                    self._reject(400, "unreadable request")
+                    return
+                text = str(body.get("text", "")).strip()
+                if not text:
+                    self._reject(400, "no command")
+                    return
+                bridge.app.actions.record("remote", f"From phone: {text}",
+                                          detail=self.client_address[0])
+                bridge.app.safe_log(f"[phone] {text}", is_user=True)
+                threading.Thread(target=bridge.app.process_command_backend,
+                                 args=(text,), daemon=True).start()
+                self._ok({"ok": True, "accepted": text})
+
+        try:
+            self.server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+        except OSError as e:
+            self.app.speak(f"Port {port} is already in use, Sir.")
+            log_debug(f"remote bridge bind failed: {e}")
+            self.server = None
+            return False
+
+        self.thread = threading.Thread(target=self.server.serve_forever,
+                                       daemon=True, name="remote-bridge")
+        self.thread.start()
+        self.cfg()["enabled"] = True
+        save_config(CONFIG)
+        self.app.actions.record("system", "Remote control enabled")
+        if announce:
+            self.speak_address()
+        return True
+
+    def stop(self):
+        if self.server is None:
+            return False
+        try:
+            self.server.shutdown()
+            self.server.server_close()
+        except Exception as e:
+            log_debug(f"remote bridge stop: {e}")
+        self.server = None
+        self.thread = None
+        self.cfg()["enabled"] = False
+        save_config(CONFIG)
+        self.app.actions.record("system", "Remote control disabled")
+        self.app.speak(f"Remote control is off, {USER_TITLE}.")
+        return True
+
+    def speak_address(self):
+        host = self.lan_address()
+        port = int(self.cfg().get("port", 8765))
+        pairing = f"{host}:{port}"
+        self.app.instantiate_card(
+            "Pair your phone", "code_bug",
+            f"Address   {pairing}\n"
+            f"Code      {self.token()}\n\n"
+            "Enter both in Amy on your phone. Anyone on this network who has\n"
+            "the code can send commands, so treat it like a password."
+        )
+        self.app.speak(f"Remote control is on, {USER_TITLE}. "
+                       "The pairing details are on screen.")
+
+    def toggle(self, on=None):
+        want = (self.server is None) if on is None else bool(on)
+        return self.start() if want else self.stop()
+
+
 class ActionLog:
     """An append-only record of everything Amy did that touched the outside
     world — applications driven, mail sent, files written, plans approved or
@@ -6706,6 +6898,7 @@ class AmyApp:
         self.proactive = ProactiveEngine(self)
         self.actions = ActionLog()
         self._routine_last = {}
+        self.remote = RemoteBridge(self)
         self.push_to_talk = PushToTalk(self)
         self.latest_screen = None
         self.latest_screen_time = 0.0
@@ -8042,6 +8235,8 @@ class AmyApp:
             threading.Thread(target=self._habit_nudge_worker, daemon=True).start()
             self.proactive.start()
             self.push_to_talk.start()
+            if CONFIG.get("remote", {}).get("enabled"):
+                self.remote.start(announce=False)
             threading.Thread(target=self._save_flush_worker, daemon=True).start()
             if CONFIG.get("camera", {}).get("start_on_launch", False):
                 self.toggle_camera(True)
@@ -14363,6 +14558,9 @@ difference() { plate_body(); holes(); }''',
             log_debug(f"push-to-talk wake failed: {e}")
 
 
+    def toggle_remote(self, on=None):
+        threading.Thread(target=self._app.remote.toggle, args=(on,), daemon=True).start()
+
     def attach_file(self, path=None, question=""):
         """Read a file and answer a question about it.
 
@@ -17583,6 +17781,15 @@ RULES
             self.memory.setdefault("app_aliases", {})[_norm_app_name(alias.group(1))] = alias.group(2).strip()
             self.save_memory()
             self.speak(f"Got it. {alias.group(1)} means {alias.group(2)}.")
+            return True
+
+        # --- REMOTE CONTROL ---
+        if re.search(r"(?:enable|turn on|start) (?:the )?(?:remote|phone)(?: control| link)?", cmd):
+            return bool(self.remote.start())
+        if re.search(r"(?:disable|turn off|stop) (?:the )?(?:remote|phone)(?: control| link)?", cmd):
+            return bool(self.remote.stop())
+        if re.search(r"(?:pair|connect) (?:my |the )?phone|pairing code", cmd):
+            self.remote.start()
             return True
 
         # --- ATTACHMENTS ---

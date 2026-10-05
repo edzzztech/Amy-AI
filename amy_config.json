@@ -199,5 +199,10 @@
         "show_chat": false,
         "layout_version": 2
     },
-    "routines": []
+    "routines": [],
+    "remote": {
+        "enabled": false,
+        "port": 8765,
+        "token": ""
+    }
 }

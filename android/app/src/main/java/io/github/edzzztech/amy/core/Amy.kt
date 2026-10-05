@@ -28,6 +28,8 @@ object Amy {
         private set
     lateinit var llm: MediaPipeLlm
         private set
+    lateinit var desktop: DesktopLink
+        private set
 
     var tts: Tts? = null
         private set
@@ -44,6 +46,7 @@ object Amy {
         conversations = Conversations(app)
         commands = Commands(app, actions)
         llm = MediaPipeLlm(app)
+        desktop = DesktopLink(app)
         tts = Tts(app).also { engine ->
             engine.onSpeakStart = { AmyState.setState(Listening.Speaking) }
             engine.onSpeakDone = { AmyState.setState(Listening.Idle) }
@@ -65,7 +68,17 @@ object Amy {
         actions.record("message", "${if (spoken) "Said" else "Typed"}: $clean")
         AmyState.setState(Listening.Thinking)
 
-        // Deterministic commands first: "open Spotify" should open Spotify every
+        // Anything aimed at the computer goes there first, before the phone
+        // tries to answer it itself.
+        forDesktop(clean)?.let { onPc ->
+            scope.launch {
+                val problem = desktop.send(onPc)
+                deliver(problem ?: "Sent that to your computer.", spoken)
+            }
+            return
+        }
+
+        // Deterministic commands next: "open Spotify" should open Spotify every
         // time, not depend on a 1B model choosing a tool correctly.
         commands.handle(clean)?.let { reply ->
             deliver(reply, spoken)
@@ -121,6 +134,19 @@ object Amy {
         AmyState.setTurns(conversations.turns())
         AmyState.setState(Listening.Thinking)
         scope.launch { converse(prompt, spoken = false) }
+    }
+
+
+    /**
+     * Strip a "on my PC" style prefix and return what is left, or null if the
+     * request was never aimed at the computer. Requiring an explicit mention
+     * is deliberate: silently sending "open Spotify" to the desktop when you
+     * meant the phone in your hand would be maddening.
+     */
+    private fun forDesktop(text: String): String? {
+        val m = DESKTOP_PREFIX.find(text) ?: return null
+        val rest = text.substring(m.range.last + 1).trim(' ', ',', ':')
+        return rest.ifBlank { null }
     }
 
     /**
@@ -181,6 +207,11 @@ object Amy {
     }
 
     private const val HISTORY_TURNS = 6
+
+    private val DESKTOP_PREFIX = Regex(
+        "^(?:on|using|with) (?:my |the )?(?:pc|computer|desktop|laptop)\b",
+        RegexOption.IGNORE_CASE,
+    )
 
     private val TURN_TOKENS =
         Regex("<\\s*/?\\s*(start_of_turn|end_of_turn|eos|bos|pad)\\s*>", RegexOption.IGNORE_CASE)

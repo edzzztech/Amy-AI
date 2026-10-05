@@ -72,6 +72,7 @@ class MainActivity : ComponentActivity() {
                     onAttach = { pickFile.launch(arrayOf("*/*")) },
                     onCamera = { CameraActivity.open(this) },
                     onOverlay = ::toggleOverlay,
+                    onPair = { PairActivity.open(this) },
                 )
             }
         }
@@ -158,6 +159,7 @@ fun Screen(
     onAttach: () -> Unit,
     onCamera: () -> Unit,
     onOverlay: () -> Unit,
+    onPair: () -> Unit,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -179,6 +181,7 @@ fun Screen(
             onAttach = onAttach,
             onCamera = onCamera,
             onOverlay = onOverlay,
+            onPair = onPair,
             onOpenDrawer = { scope.launch { drawerState.open() } },
         )
     }
@@ -244,6 +247,7 @@ private fun Home(
     onAttach: () -> Unit,
     onCamera: () -> Unit,
     onOverlay: () -> Unit,
+    onPair: () -> Unit,
     onOpenDrawer: () -> Unit,
 ) {
     val state by AmyState.state.collectAsState()
@@ -367,6 +371,8 @@ private fun Home(
                 ToolButton(Sym.Camera, onCamera)
                 Spacer(Modifier.width(4.dp))
                 ToolButton(Sym.Orb, onOverlay, active = overlayOn)
+                Spacer(Modifier.width(4.dp))
+                ToolButton(Sym.Menu, onPair)
                 Spacer(Modifier.width(6.dp))
                 OutlinedTextField(
                     value = draft,
