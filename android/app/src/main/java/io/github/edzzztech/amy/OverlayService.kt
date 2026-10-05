@@ -4,7 +4,6 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
-import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
@@ -53,12 +52,8 @@ class OverlayService : Service() {
         val view = OrbView(this)
         val size = (84 * resources.displayMetrics.density).toInt()
 
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
-        }
+        // minSdk is 29, so the modern overlay type is always available.
+        val type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
 
         val lp = WindowManager.LayoutParams(
             size, size, type,
@@ -73,8 +68,18 @@ class OverlayService : Service() {
             y = resources.displayMetrics.heightPixels / 3
         }
 
+        // Real click listeners, not just touch handling: a screen reader's
+        // double tap calls performClick, and without these it did nothing.
+        view.setOnClickListener { openApp() }
+        view.setOnLongClickListener { toggleListening(); true }
         view.setOnTouchListener(DragHandler(wm, lp, view))
-        wm.addView(view, lp)
+        try {
+            wm.addView(view, lp)
+        } catch (e: Exception) {
+            // The permission can be revoked between the check and here.
+            stopSelf()
+            return
+        }
 
         windowManager = wm
         orb = view
@@ -103,6 +108,18 @@ class OverlayService : Service() {
         private var downAt = 0L
         private var moved = false
 
+        /**
+         * The window may be dragged past the edges, but not left there: a
+         * floating control that is fully off screen is lost until restart.
+         */
+        private fun keepOnScreen() {
+            val dm = resources.displayMetrics
+            val margin = (lp.width * 0.4f).toInt()
+            lp.x = lp.x.coerceIn(-margin, dm.widthPixels - lp.width + margin)
+            lp.y = lp.y.coerceIn(0, dm.heightPixels - lp.height)
+            runCatching { wm.updateViewLayout(view, lp) }
+        }
+
         override fun onTouch(v: android.view.View, event: MotionEvent): Boolean {
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -124,7 +141,9 @@ class OverlayService : Service() {
                 MotionEvent.ACTION_UP -> {
                     val held = System.currentTimeMillis() - downAt
                     if (!moved) {
-                        if (held > LONG_PRESS_MS) toggleListening() else openApp()
+                        if (held > LONG_PRESS_MS) v.performLongClick() else v.performClick()
+                    } else {
+                        keepOnScreen()
                     }
                     return true
                 }

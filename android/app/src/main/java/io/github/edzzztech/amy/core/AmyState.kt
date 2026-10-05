@@ -16,6 +16,23 @@ object AmyState {
     private val _state = MutableStateFlow(Listening.Idle)
     val state: StateFlow<Listening> = _state.asStateFlow()
 
+    /**
+     * Whether she has been put to sleep, held separately from [state].
+     *
+     * Inferring it from the status does not work: being told to sleep, she says
+     * "I'll stop listening", the status passes through Speaking, and when the
+     * sentence ends the voice reported ready — awake on screen, asleep in fact.
+     */
+    private val _asleep = MutableStateFlow(false)
+    val asleep: StateFlow<Boolean> = _asleep.asStateFlow()
+
+    fun setAsleep(value: Boolean) {
+        _asleep.value = value
+    }
+
+    /** The status to fall back to when she finishes talking or thinking. */
+    fun settled(): Listening = if (_asleep.value) Listening.Muted else Listening.Idle
+
     /** The live transcript, updated as partial results arrive. */
     private val _heard = MutableStateFlow("")
     val heard: StateFlow<String> = _heard.asStateFlow()

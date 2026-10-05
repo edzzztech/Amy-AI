@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -119,10 +120,16 @@ class MainActivity : ComponentActivity() {
     }
 
     /** The mic button wakes or sleeps the always-on listener. */
+    /**
+     * Talking: interrupt her. Asleep: wake her. Otherwise: put her to sleep.
+     * Asleep is read from its own flag, not the status, which passes through
+     * Speaking and Thinking while she is asleep.
+     */
     private fun toggleListening() {
-        when (AmyState.state.value) {
-            Listening.Speaking -> Amy.stopSpeaking()
-            Listening.Muted -> send(AmyService.ACTION_LISTEN)
+        when {
+            AmyState.state.value == Listening.Speaking ||
+                AmyState.state.value == Listening.Thinking -> Amy.stopSpeaking()
+            AmyState.asleep.value -> send(AmyService.ACTION_LISTEN)
             else -> send(AmyService.ACTION_SLEEP)
         }
     }
@@ -142,6 +149,9 @@ private val AmyColors = darkColorScheme(
     onBackground = Color(0xFFE8EAF2),
     onSurface = Color(0xFFE8EAF2),
 )
+
+/** How close to the bottom counts as "following" a streaming reply. */
+private const val FOLLOW_THRESHOLD_PX = 400
 
 private val Line = Color(0x1AFFFFFF)
 private val Muted = Color(0xFF8C92A6)
@@ -293,11 +303,25 @@ private fun Home(
                 Spacer(Modifier.width(10.dp))
             }
 
+            // Follow the conversation as it grows, the way a chat should. New
+            // turns always scroll into view; a streaming reply only pulls you
+            // down if you were already near the bottom, so scrolling up to
+            // reread something is not fought by every new word.
+            val scroll = rememberScrollState()
+            LaunchedEffect(turns.size) {
+                scroll.animateScrollTo(scroll.maxValue)
+            }
+            LaunchedEffect(reply.length) {
+                if (scroll.maxValue - scroll.value < FOLLOW_THRESHOLD_PX) {
+                    scroll.scrollTo(scroll.maxValue)
+                }
+            }
+
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scroll)
                     .padding(horizontal = 22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -414,27 +438,40 @@ private fun StatusPill(state: Listening) {
     }
     val tint = if (state == Listening.Muted) Muted else MaterialTheme.colorScheme.primary
     val working = state == Listening.Thinking || state == Listening.Listening
-    val pulse = rememberInfiniteTransition(label = "pill")
-    val alpha by pulse.animateFloat(
-        initialValue = if (working) 0.45f else 1f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "pulseAlpha",
-    )
+    // Only animate while she is working: an infinite transition left running
+    // at rest redraws every frame for nothing, which is battery for no reason.
+    val alpha = if (working) {
+        val pulse = rememberInfiniteTransition(label = "pill")
+        pulse.animateFloat(
+            initialValue = 0.45f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+            label = "pulseAlpha",
+        ).value
+    } else 1f
     Text(
         label,
         fontSize = 11.sp,
         letterSpacing = 1.5.sp,
         color = tint,
-        modifier = Modifier.alpha(alpha),
+        modifier = Modifier.graphicsLayer { this.alpha = alpha },
     )
 }
 
+/**
+ * One message.
+ *
+ * Only your messages fade in. Hers stream in word by word, which is its own
+ * entrance; fading them as well was what broke the streaming reply. Its fade
+ * state was keyed on the text length, so it reset to invisible on every token,
+ * and the effect that makes it visible only ever fires once — the reply faded
+ * out as it arrived and stayed gone.
+ */
 @Composable
 private fun Bubble(turn: Turn, streaming: Boolean = false) {
     val mine = turn.role == "you"
-    var shown by remember(turn.at, turn.text.length) { mutableStateOf(false) }
-    LaunchedEffect(Unit) { shown = true }
+    var shown by remember(turn.at) { mutableStateOf(!mine) }
+    LaunchedEffect(turn.at) { shown = true }
     val alpha by animateFloatAsState(
         targetValue = if (shown) 1f else 0f,
         animationSpec = tween(260),
@@ -442,7 +479,10 @@ private fun Bubble(turn: Turn, streaming: Boolean = false) {
     )
 
     Column(
-        Modifier.fillMaxWidth().padding(bottom = 16.dp).alpha(alpha),
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp)
+            .graphicsLayer { this.alpha = if (streaming) 1f else alpha },
         horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
     ) {
         if (!mine) {
@@ -477,20 +517,34 @@ private fun Bubble(turn: Turn, streaming: Boolean = false) {
     }
 }
 
+/**
+ * The send-or-listen button.
+ *
+ * It breathes while listening by scaling its *drawing*, not its size. Animating
+ * the size changed the layout every frame, which made the whole input row
+ * re-measure sixty times a second — the opposite of smooth. A graphics-layer
+ * scale is applied on the GPU after layout and costs nothing.
+ */
 @Composable
 private fun MicOrSend(hasDraft: Boolean, state: Listening, onClick: () -> Unit) {
     val listening = state == Listening.Listening
-    val scale by animateFloatAsState(
-        targetValue = if (listening) 1.06f else 1f,
-        animationSpec = if (listening) {
-            infiniteRepeatable(tween(700), RepeatMode.Reverse)
-        } else tween(200),
-        label = "micScale",
-    )
+    val scale = if (listening) {
+        val breath = rememberInfiniteTransition(label = "mic")
+        breath.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.07f,
+            animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+            label = "micScale",
+        ).value
+    } else 1f
     val sleeping = state == Listening.Muted && !hasDraft
     Box(
         Modifier
-            .size((48 * scale).dp)
+            .size(48.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .clip(CircleShape)
             .background(
                 if (sleeping) MaterialTheme.colorScheme.surface

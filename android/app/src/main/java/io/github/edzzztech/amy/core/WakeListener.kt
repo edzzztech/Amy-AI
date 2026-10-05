@@ -3,60 +3,83 @@ package io.github.edzzztech.amy.core
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.speech.SpeechRecognizer
 
 /**
  * Always listening, in the desktop's sense: the microphone is open, but she
- * only acts when she hears her name — or when you are already mid-conversation.
+ * only acts when addressed by name — or when you are already mid-conversation.
  *
- * Android's recogniser stops after each utterance, so "continuous" means
- * restarting it in a loop. That is the standard approach and it is why there
- * is a backoff here: a recogniser that fails instantly and is restarted
- * instantly will spin a core flat.
+ * ## The rules, and the bug behind each one
  *
- * A conversation window follows every exchange, exactly as on the desktop, so
- * follow-ups do not each need the wake word.
+ *  - **Deaf while she talks.** Her own voice comes back through the
+ *    microphone, and every reply opens the follow-up window, so without this
+ *    she hears herself and answers herself, forever. [pauseForSpeech] and
+ *    [resumeAfterSpeech] are driven by the voice starting and stopping.
+ *    Interrupting by voice is therefore not possible on the phone — tap to
+ *    interrupt — because Android's recogniser exposes no echo cancellation.
+ *  - **The follow-up window opens when she stops speaking**, not when you
+ *    finished. Timed from your command, a twenty-second answer used up the
+ *    whole twenty-second window before she had finished saying it.
+ *  - **A watchdog.** A reused recogniser occasionally stops calling back
+ *    altogether. Without a timeout she would simply never hear anything again.
+ *  - **Backoff.** Android's recogniser stops after every utterance, so
+ *    continuous means restarting it. One that fails instantly and is restarted
+ *    instantly spins a core flat.
+ *  - **Silence is not an error.** No-match and timeout are what happens when
+ *    nobody is talking. Treating them as faults flickered the status every few
+ *    seconds and eventually raised a false alarm.
+ *
+ * Everything here runs on the main thread; callbacks from other threads are
+ * posted to it.
  */
 class WakeListener(
     context: Context,
     private val onCommand: (String) -> Unit,
 ) {
 
-    var wakeWord: String = "amy"
+    /** Listening is wanted. False only when she has been put to sleep. */
     var enabled: Boolean = false
         private set
 
-    /** Seconds after a reply during which the wake word is not needed. */
+    /** Milliseconds after she stops talking during which her name is not needed. */
     var conversationWindowMs: Long = 20_000
 
     private val stt = Stt(context)
     private val main = Handler(Looper.getMainLooper())
-    private var lastExchange = 0L
-    private var consecutiveFailures = 0
-    private var stopping = false
+
+    /** When the follow-up window last opened. */
+    private var windowOpenedAt = 0L
+    private var talking = false
+    private var faults = 0
+
+    private val watchdog = Runnable {
+        // No result, no error, nothing: the recogniser has wedged. Replace it.
+        if (enabled && !talking && stt.isListening) {
+            stt.reset()
+            scheduleListen(RESTART_MS)
+        }
+    }
 
     init {
         stt.onReadyForSpeech = {
-            AmyState.setState(Listening.Listening)
-            consecutiveFailures = 0
+            faults = 0
+            AmyState.setProblem(null)
+            if (!talking) AmyState.setState(Listening.Listening)
         }
-        stt.onPartial = { AmyState.setHeard(it) }
+        stt.onPartial = { if (!talking) AmyState.setHeard(it) }
         stt.onFinal = { text ->
+            main.removeCallbacks(watchdog)
             AmyState.setHeard("")
-            handle(text)
-            // Short gap only: the recogniser is reused, so resuming is silent.
-            restartSoon(250)
+            if (!talking) handle(text)
+            scheduleListen(RESTART_MS)
         }
-        stt.onError = {
-            // Silence and no-match are the normal case when nobody is talking,
-            // so they are not surfaced — only a persistent fault is.
-            consecutiveFailures++
-            AmyState.setState(Listening.Idle)
-            if (consecutiveFailures >= 8) {
-                AmyState.setProblem("The recogniser keeps failing. Check the microphone permission.")
-            }
-            restartSoon(backoff())
+        stt.onError = { code, description ->
+            main.removeCallbacks(watchdog)
+            onRecognitionError(code, description)
         }
     }
+
+    // --- lifecycle -----------------------------------------------------------
 
     fun start() {
         if (!stt.isAvailable) {
@@ -64,43 +87,62 @@ class WakeListener(
             return
         }
         enabled = true
-        stopping = false
-        consecutiveFailures = 0
-        restartSoon(0)
+        faults = 0
+        AmyState.setAsleep(false)
+        if (!talking) AmyState.setState(Listening.Idle)
+        if (!talking) scheduleListen(0)
     }
 
+    /** Put her to sleep. The recogniser is kept, so waking makes no sound. */
     fun stop() {
         enabled = false
-        stopping = true
         main.removeCallbacksAndMessages(null)
-        // pause(), not stop(): keeping the recogniser alive means waking her
-        // again does not replay the device's start cue.
         stt.pause()
-        AmyState.setState(Listening.Idle)
+        AmyState.setHeard("")
+        AmyState.setAsleep(true)
+        AmyState.setState(Listening.Muted)
     }
 
     /** Release the recogniser for good. Only when the service is going away. */
     fun release() {
         enabled = false
-        stopping = true
         main.removeCallbacksAndMessages(null)
         stt.stop()
     }
 
-    /** Called after she finishes replying, to open the follow-up window. */
-    fun markExchange() {
-        lastExchange = System.currentTimeMillis()
+    // --- her own voice -------------------------------------------------------
+
+    /** She has started talking: stop hearing, so she cannot hear herself. */
+    fun pauseForSpeech() = main.post {
+        talking = true
+        main.removeCallbacksAndMessages(null)
+        stt.pause()
+        AmyState.setHeard("")
     }
 
+    /** She has finished: open the follow-up window and listen again. */
+    fun resumeAfterSpeech() = main.post {
+        talking = false
+        windowOpenedAt = System.currentTimeMillis()
+        // A short pause lets the end of her voice die away before listening,
+        // or the recogniser catches the tail of her last word.
+        scheduleListen(AFTER_SPEECH_MS)
+    }
+
+    // --- recognition ---------------------------------------------------------
+
     private fun inConversation(): Boolean =
-        System.currentTimeMillis() - lastExchange < conversationWindowMs
+        System.currentTimeMillis() - windowOpenedAt < conversationWindowMs
 
     private fun handle(heardRaw: String) {
         val heard = heardRaw.trim()
         if (heard.isEmpty()) return
 
-        // Spoken switches, checked before anything else so you can always
-        // turn her off by voice.
+        val addressed = WakeWords.isAddressed(heard)
+        if (!addressed && !inConversation()) return          // not for her
+
+        // Spoken switches only when she is being spoken to, so a television
+        // saying "stop listening" cannot put her to sleep.
         val lower = heard.lowercase()
         if (STOP.containsMatchIn(lower)) {
             stop()
@@ -108,41 +150,58 @@ class WakeListener(
             return
         }
 
-        val spokenTo = lower.contains(wakeWord.lowercase())
-        if (!spokenTo && !inConversation()) return      // not for her
-
-        val command = if (spokenTo) stripWake(heard) else heard
+        val command = if (addressed) WakeWords.stripWake(heard) else heard
         if (command.isBlank()) {
-            // Just her name: acknowledge and keep the window open.
-            lastExchange = System.currentTimeMillis()
             onCommand(INTERNAL_NAME_ONLY)
             return
         }
-        lastExchange = System.currentTimeMillis()
         onCommand(command)
     }
 
-    /** Remove the wake word and any filler immediately around it. */
-    private fun stripWake(text: String): String {
-        val idx = text.lowercase().indexOf(wakeWord.lowercase())
-        if (idx < 0) return text
-        return text.substring(idx + wakeWord.length)
-            .trimStart(' ', ',', '.', '?', '!', ':', ';')
-            .trim()
+    private fun onRecognitionError(code: Int, description: String) {
+        when (code) {
+            // Nobody spoke, or nothing intelligible. The normal case: carry on.
+            SpeechRecognizer.ERROR_NO_MATCH,
+            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                faults = 0
+                scheduleListen(RESTART_MS)
+            }
+
+            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
+                AmyState.setProblem("Amy needs the microphone permission to listen.")
+                stop()
+            }
+
+            // A wedged recogniser: throw it away and build a fresh one.
+            SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
+            SpeechRecognizer.ERROR_CLIENT -> {
+                faults++
+                stt.reset()
+                scheduleListen(backoff())
+            }
+
+            else -> {
+                faults++
+                if (faults >= FAULTS_BEFORE_REPORTING) AmyState.setProblem(description)
+                scheduleListen(backoff())
+            }
+        }
     }
 
-    private fun backoff(): Long =
-        when {
-            consecutiveFailures <= 2 -> 500L
-            consecutiveFailures <= 5 -> 1_500L
-            else -> 4_000L
-        }
+    private fun backoff(): Long = when {
+        faults <= 2 -> 500L
+        faults <= 5 -> 1_500L
+        else -> 4_000L
+    }
 
-    private fun restartSoon(delayMs: Long) {
-        if (!enabled || stopping) return
+    private fun scheduleListen(delayMs: Long) {
+        if (!enabled || talking) return
         main.removeCallbacksAndMessages(null)
         main.postDelayed({
-            if (enabled && !stopping) stt.listen()
+            if (enabled && !talking) {
+                stt.listen()
+                main.postDelayed(watchdog, WATCHDOG_MS)
+            }
         }, delayMs)
     }
 
@@ -151,8 +210,13 @@ class WakeListener(
         const val INTERNAL_NAME_ONLY = "\u0000name"
         const val INTERNAL_STOPPED = "\u0000stopped"
 
-        private val STOP = Regex(
-            "stop listening|stop the mic|mute yourself|go to sleep|that's enough"
-        )
+        private const val RESTART_MS = 250L
+        private const val AFTER_SPEECH_MS = 450L
+        private const val WATCHDOG_MS = 20_000L
+        private const val FAULTS_BEFORE_REPORTING = 6
+
+        // Deliberately narrow. "That's enough" used to be here and would mute
+        // her in the middle of an ordinary conversation.
+        private val STOP = Regex("stop listening|stop the mic|mute yourself|go to sleep")
     }
 }

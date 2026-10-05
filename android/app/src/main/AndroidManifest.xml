@@ -43,7 +43,10 @@
     <application
         android:name=".AmyApp"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Amy">
@@ -73,7 +76,6 @@
         <activity
             android:name=".CameraActivity"
             android:exported="false"
-            android:screenOrientation="portrait"
             android:theme="@style/Theme.Amy" />
 
         <!-- The floating orb above other apps. -->

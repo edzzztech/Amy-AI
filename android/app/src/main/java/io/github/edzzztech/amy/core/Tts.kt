@@ -3,26 +3,42 @@ package io.github.edzzztech.amy.core
 import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import kotlinx.coroutines.channels.Channel
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Speech out, with the desktop's two rules preserved:
+ * Speech out.
  *
- *  - sentences are queued and spoken in order, so a streaming reply can start
- *    talking before the model has finished thinking
- *  - a barge-in drops everything still queued rather than letting her finish
+ * Three rules, all of which earlier versions got wrong in some way:
+ *
+ *  - **"Speaking" means the whole reply, not each sentence.** A streamed reply
+ *    is queued one sentence at a time, and the platform reports start and done
+ *    per sentence. Reporting those directly made her flicker between speaking
+ *    and idle mid-answer — and the listener uses that state to decide when it
+ *    is safe to hear you again. So utterances are counted, and listeners hear
+ *    one start when the first begins and one done when the last ends.
+ *  - **Barge-in invalidates what is still coming.** A reply keeps streaming
+ *    from the model after you interrupt. Each sentence carries the [turn] it was
+ *    produced under; stop() advances the turn, so anything from the old reply
+ *    that arrives afterwards is dropped instead of spoken.
+ *  - **Callbacks arrive on a TTS thread**, so state here is atomic.
  */
 class Tts(context: Context) {
 
     private val ready = Channel<Boolean>(Channel.CONFLATED)
     private val counter = AtomicInteger(0)
+    private val pending = AtomicInteger(0)
 
-    /** Bumped on every interruption; anything queued under an older turn is dropped. */
+    /** Bumped on every interruption; text produced under an older turn is dropped. */
     @Volatile
-    var generation: Int = 0
+    var turn: Int = 0
         private set
+
+    /** True from the first queued sentence until the last one finishes. */
+    val isTalking: Boolean
+        get() = pending.get() > 0
 
     // Deliberately not named onStart/onDone: inside the listener object below
     // those names resolve to its own methods, not to these properties.
@@ -33,19 +49,36 @@ class Tts(context: Context) {
         ready.trySend(status == TextToSpeech.SUCCESS)
     }.apply {
         setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                onSpeakStart?.invoke()
-            }
+            override fun onStart(utteranceId: String?) {}
 
-            override fun onDone(utteranceId: String?) {
-                onSpeakDone?.invoke()
-            }
+            override fun onDone(utteranceId: String?) = finished()
+
+            override fun onStop(utteranceId: String?, interrupted: Boolean) = finished()
 
             @Deprecated("Required by the base class")
-            override fun onError(utteranceId: String?) {
-                onSpeakDone?.invoke()
-            }
+            override fun onError(utteranceId: String?) = finished()
+
+            override fun onError(utteranceId: String?, errorCode: Int) = finished()
         })
+    }
+
+    /**
+     * One utterance ended; if it was the last, the reply is over.
+     *
+     * Only the 1 -> 0 transition reports done. After stop() zeroes the count,
+     * the engine still delivers onStop for the sentence it cut off; that must
+     * not report done a second time. A CAS loop rather than updateAndGet,
+     * because updateAndGet may retry its lambda and fire twice under contention.
+     */
+    private fun finished() {
+        while (true) {
+            val current = pending.get()
+            if (current <= 0) return
+            if (pending.compareAndSet(current, current - 1)) {
+                if (current == 1) onSpeakDone?.invoke()
+                return
+            }
+        }
     }
 
     suspend fun awaitReady(): Boolean = ready.receive()
@@ -59,10 +92,10 @@ class Tts(context: Context) {
     /**
      * Get as close to the desktop's voice as Android allows.
      *
-     * The desktop speaks through edge-tts with en-GB-SoniaNeural. That voice
-     * is a Microsoft cloud endpoint, so it cannot be used offline here — this
-     * picks the nearest thing installed: a British English female voice,
-     * preferring a network-free, higher-quality one.
+     * The desktop speaks through edge-tts with en-GB-SoniaNeural, a Microsoft
+     * cloud endpoint that cannot be used offline here. This picks the nearest
+     * thing installed: British English, female by name, network-free, highest
+     * quality available.
      */
     fun useDesktopVoice() {
         setVoice(Locale.UK)
@@ -71,7 +104,7 @@ class Tts(context: Context) {
                 ?.filter { it.locale.language == "en" && it.locale.country == "GB" }
                 ?.filterNot { it.isNetworkConnectionRequired }
                 ?.sortedWith(
-                    compareByDescending<android.speech.tts.Voice> { v ->
+                    compareByDescending<Voice> { v ->
                         // Android does not expose gender, so go on the name.
                         if (FEMALE_HINTS.any { it in v.name.lowercase() }) 1 else 0
                     }.thenByDescending { it.quality },
@@ -83,28 +116,40 @@ class Tts(context: Context) {
         if (best != null) engine.voice = best
     }
 
+    /**
+     * Queue one sentence. Pass the turn captured when the reply began; text
+     * from a reply that has since been interrupted is silently dropped.
+     */
+    fun speak(text: String, turn: Int = this.turn) {
+        if (turn != this.turn) return
+        val clean = text.trim()
+        if (clean.isEmpty()) return
+        // Count it before handing it over, so a fast engine cannot report done
+        // before we have recorded that it started.
+        if (pending.getAndIncrement() == 0) onSpeakStart?.invoke()
+        val result = engine.speak(
+            clean, TextToSpeech.QUEUE_ADD, null, "amy-${counter.incrementAndGet()}",
+        )
+        if (result != TextToSpeech.SUCCESS) finished()
+    }
+
+    /** Barge-in: stop now, drop the queue, and invalidate the rest of this reply. */
+    fun stop() {
+        turn++
+        val wasTalking = pending.getAndSet(0) > 0
+        engine.stop()
+        if (wasTalking) onSpeakDone?.invoke()
+    }
+
+    fun shutdown() {
+        pending.set(0)
+        engine.stop()
+        engine.shutdown()
+    }
+
     private companion object {
         val FEMALE_HINTS = listOf(
             "female", "sonia", "libby", "hazel", "susan", "serena", "kate", "-f-",
         )
-    }
-
-    /** Queue one sentence. Pass the generation the text was produced under. */
-    fun speak(text: String, turn: Int = generation) {
-        if (turn != generation) return          // produced before an interruption
-        val clean = text.trim()
-        if (clean.isEmpty()) return
-        engine.speak(clean, TextToSpeech.QUEUE_ADD, null, "amy-${counter.incrementAndGet()}")
-    }
-
-    /** Barge-in: stop now and invalidate everything still queued. */
-    fun stop() {
-        generation++
-        engine.stop()
-    }
-
-    fun shutdown() {
-        engine.stop()
-        engine.shutdown()
     }
 }

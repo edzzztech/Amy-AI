@@ -11,16 +11,13 @@ import android.speech.SpeechRecognizer
 /**
  * Speech in, built for listening continuously rather than in bursts.
  *
- * Two things matter for an always-on assistant, and getting either wrong is
- * what makes it sound like it is looping:
- *
- *  - **One recogniser, reused.** Creating and destroying a SpeechRecognizer
- *    per utterance makes most devices replay their start cue every cycle, so
- *    you hear a beep every second or so. The instance is created once and
- *    simply told to listen again.
- *  - **The cues are muted while it runs.** Even reused, many devices chime on
- *    start and end. Those streams are silenced for the duration and restored
- *    afterwards, so nothing is left muted if she is stopped.
+ *  - **One recogniser, reused.** Creating and destroying one per utterance makes
+ *    most devices replay their start cue every cycle — a chime every second.
+ *  - **It can be reset.** A reused recogniser occasionally wedges: it reports
+ *    busy forever, or stops calling back at all. [reset] throws it away so the
+ *    next pass gets a fresh one, and the listener uses it when that happens.
+ *  - **Errors carry their code.** Silence and no-match are the normal case when
+ *    nobody is talking; the caller needs to tell those apart from real faults.
  *
  * Must be driven from the main thread — a SpeechRecognizer requirement.
  */
@@ -28,7 +25,8 @@ class Stt(private val context: Context) {
 
     var onPartial: ((String) -> Unit)? = null
     var onFinal: ((String) -> Unit)? = null
-    var onError: ((String) -> Unit)? = null
+    /** (error code, human description). Codes are SpeechRecognizer.ERROR_*. */
+    var onError: ((Int, String) -> Unit)? = null
     var onReadyForSpeech: (() -> Unit)? = null
     var onEndOfSpeech: (() -> Unit)? = null
 
@@ -39,17 +37,19 @@ class Stt(private val context: Context) {
      * Silence the device's listening cues while she is listening.
      *
      * Off by default, deliberately. Muting the system and notification streams
-     * is a blunt instrument: it silences everything else on the phone too, so
-     * an always-on assistant would effectively keep your handset on silent all
-     * day and you would miss messages. Reusing one recogniser already removes
-     * the repeated chime, which was the real problem; this is only here for
-     * devices that still cue on every pass, and it is yours to switch on.
+     * silences everything else on the phone too, so an always-on assistant
+     * would keep your handset on silent all day. Reusing one recogniser already
+     * removes the repeated chime; this exists only for devices that still cue
+     * on every pass, and it is yours to switch on.
      */
     var suppressCues: Boolean = false
 
     private var recognizer: SpeechRecognizer? = null
-    private var listening = false
     private var mutedStreams = false
+
+    /** True between startListening and the matching result or error. */
+    var isListening: Boolean = false
+        private set
 
     private val audio: AudioManager? =
         context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -60,15 +60,17 @@ class Stt(private val context: Context) {
     private val listener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) { onReadyForSpeech?.invoke() }
         override fun onBeginningOfSpeech() {}
+
         override fun onRmsChanged(rmsdB: Float) {
-            // RMS arrives roughly -2..10 dB from the recogniser; map it to 0..1
-            // so the orb swells with your voice rather than a synthetic pulse.
+            // RMS arrives roughly -2..10 dB; map to 0..1 so the orb swells with
+            // your voice rather than a synthetic pulse.
             AmyState.setLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
         }
+
         override fun onBufferReceived(buffer: ByteArray?) {}
 
         override fun onEndOfSpeech() {
-            listening = false
+            AmyState.setLevel(0f)
             onEndOfSpeech?.invoke()
         }
 
@@ -77,18 +79,26 @@ class Stt(private val context: Context) {
         }
 
         override fun onResults(results: Bundle?) {
-            listening = false
+            finishPass()
             val text = firstResult(results)
-            if (text.isNullOrBlank()) onError?.invoke("Didn't catch that")
-            else onFinal?.invoke(text)
+            if (text.isNullOrBlank()) {
+                onError?.invoke(SpeechRecognizer.ERROR_NO_MATCH, "Didn't catch that")
+            } else {
+                onFinal?.invoke(text)
+            }
         }
 
         override fun onError(error: Int) {
-            listening = false
-            this@Stt.onError?.invoke(describe(error))
+            finishPass()
+            this@Stt.onError?.invoke(error, describe(error))
         }
 
         override fun onEvent(eventType: Int, params: Bundle?) {}
+    }
+
+    private fun finishPass() {
+        isListening = false
+        AmyState.setLevel(0f)
     }
 
     /** Create the recogniser once; [listen] is then cheap to call repeatedly. */
@@ -107,28 +117,25 @@ class Stt(private val context: Context) {
 
     /** Start one listening pass on the existing recogniser. */
     fun listen() {
+        if (isListening) return          // already going; restarting would cue again
         val r = ensureRecognizer()
         if (r == null) {
-            onError?.invoke("No speech recogniser on this device")
+            onError?.invoke(SpeechRecognizer.ERROR_CLIENT, "No speech recogniser on this device")
             return
         }
-        if (listening) return          // already going; restarting would cue again
         if (suppressCues) muteCues()
-        listening = true
+        isListening = true
         try {
             r.startListening(intent())
         } catch (e: Exception) {
-            listening = false
-            onError?.invoke("Could not start listening")
+            isListening = false
+            onError?.invoke(SpeechRecognizer.ERROR_CLIENT, "Could not start listening")
         }
     }
 
-    /** Kept for the old call sites; identical to [listen] now. */
-    fun start() = listen()
-
     /** Stop listening but keep the recogniser, so resuming makes no sound. */
     fun pause() {
-        listening = false
+        isListening = false
         AmyState.setLevel(0f)
         try {
             recognizer?.cancel()
@@ -138,11 +145,21 @@ class Stt(private val context: Context) {
         restoreCues()
     }
 
-    /** Fully release. Only on shutdown — this is what makes the next start audible. */
-    fun stop() {
-        listening = false
+    /**
+     * Throw the recogniser away. The next [listen] builds a fresh one. Used when
+     * a reused instance has wedged — busy forever, or silent with no callbacks.
+     */
+    fun reset() {
+        release()
+    }
+
+    /** Fully release. On shutdown, or to recover from a wedged recogniser. */
+    fun stop() = release()
+
+    private fun release() {
+        isListening = false
+        AmyState.setLevel(0f)
         try {
-            recognizer?.stopListening()
             recognizer?.cancel()
             recognizer?.destroy()
         } catch (e: Exception) {
@@ -155,7 +172,7 @@ class Stt(private val context: Context) {
     private fun intent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
         if (preferOffline) putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
     }
 
@@ -190,11 +207,19 @@ class Stt(private val context: Context) {
         mutedStreams = false
     }
 
-    private fun firstResult(bundle: Bundle?): String? =
-        bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-            ?.firstOrNull()
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() }
+    /**
+     * The best hypothesis — but if any alternative contains her name and the
+     * best does not, prefer that one. Recognisers often rank "I me" above "Amy";
+     * asking for three hypotheses and checking them all is the cheap fix.
+     */
+    private fun firstResult(bundle: Bundle?): String? {
+        val all = bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+        if (all.isEmpty()) return null
+        return all.firstOrNull { WakeWords.containsWake(it) } ?: all.first()
+    }
 
     private fun describe(error: Int): String = when (error) {
         SpeechRecognizer.ERROR_AUDIO -> "Microphone trouble"
@@ -211,9 +236,6 @@ class Stt(private val context: Context) {
 
     private companion object {
         /** The streams devices use for the listening chime. */
-        val CUE_STREAMS = listOf(
-            AudioManager.STREAM_SYSTEM,
-            AudioManager.STREAM_NOTIFICATION,
-        )
+        val CUE_STREAMS = listOf(AudioManager.STREAM_SYSTEM, AudioManager.STREAM_NOTIFICATION)
     }
 }

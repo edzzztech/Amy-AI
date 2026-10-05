@@ -14604,7 +14604,11 @@ difference() { plate_body(); holes(); }''',
                      "Summarise this: what it is, the key points, and anything "
                      "that needs action."))
         self.current_attachment = {"name": name, "path": path, "text": body}
-        self._dispatch_command(prompt)
+        # Straight to the model. The file is data: routed through the command
+        # path, its contents were matched as instructions, so a document that
+        # merely mentioned "shutdown" would close Amy, and one that said
+        # "open Chrome" would open it.
+        threading.Thread(target=self._converse, args=(prompt,), daemon=True).start()
         return True
 
     def _ask_for_file(self):
@@ -18781,6 +18785,18 @@ RULES
             except Exception as e:
                 log_debug(f"auto-research failed, falling back to chat: {e}")
 
+        # Not a command: hand it to the model.
+        self._converse(cmd)
+
+    def _converse(self, cmd):
+        """Answer with the model, and nothing else.
+
+        Split out of process_command_backend so text can reach the model
+        without first passing through every command matcher. That matters
+        for attachments: a document is data, and routed through the command
+        path its contents were treated as instructions - a log file that
+        merely contained the word 'shutdown' would close Amy.
+        """
         # Repeated question? Answer instantly without touching the model.
         cached = self.cache_get(cmd)
         if cached:

@@ -147,16 +147,22 @@ private fun CameraScreen(
     val lens = if (front) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
+        // Bind once per lens. Binding from both factory and update ran it on
+        // creation and again on every recomposition, so the camera was torn
+        // down and rebuilt repeatedly — a flicker each time.
+        var preview by remember { mutableStateOf<PreviewView?>(null) }
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 PreviewView(ctx).also { view ->
                     view.scaleType = PreviewView.ScaleType.FILL_CENTER
-                    onBind(view, lens)
+                    preview = view
                 }
             },
-            update = { view -> onBind(view, lens) },
         )
+        LaunchedEffect(preview, lens) {
+            preview?.let { onBind(it, lens) }
+        }
 
         // Top bar: close, and the name of the active lens.
         Row(

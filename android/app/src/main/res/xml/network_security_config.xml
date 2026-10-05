@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The desktop link talks plain HTTP to Amy on a computer on your own network.
+  Android blocks cleartext traffic by default, which silently broke pairing:
+  every request failed before it left the phone.
+
+  Permitting it is safe here because the desktop link is the only thing in the
+  app that makes network requests, it only ever addresses a private LAN address
+  that you typed in, and every request carries the pairing code.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
