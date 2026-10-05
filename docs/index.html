@@ -644,7 +644,7 @@
       <div class="card">
         <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></div>
         <h3>Full-duplex voice</h3>
-        <p>She listens while she speaks. Interrupt her mid-sentence and she stops — barge-in is voice-activated, with a clap as a backup wake signal.</p>
+        <p>She listens while she speaks. Interrupt her mid-sentence and she stops — barge-in is voice-activated, with a clap or a global hotkey as backup wake signals.</p>
         <span class="more">Read more</span>
         <div class="detail" hidden>
 <p>Amy listens and speaks at the same time. There is no press-to-talk and no waiting for her to finish &mdash; start speaking and she stops mid-sentence.</p>
@@ -653,6 +653,8 @@
   <li>Say the wake word, then your request: <em>&ldquo;Amy, what&rsquo;s the weather?&rdquo;</em></li>
   <li>Interrupt her at any point by simply talking over her.</li>
   <li>Clap twice to wake her if your voice won&rsquo;t carry.</li>
+  <li>Or press a global hotkey &mdash; works in a noisy room, with music on, or when you
+      simply don&rsquo;t want to say her name. Press it again while she&rsquo;s talking to stop her.</li>
   <li>Pause mid-thought and she keeps listening rather than cutting you off.</li>
 </ul>
 <h4>Settings</h4>
@@ -661,6 +663,7 @@
   <tr><td><code>barge_in</code></td><td><code>voice</code> stops her the moment you speak; <code>off</code> lets her finish.</td></tr>
   <tr><td><code>barge_sensitivity</code></td><td>Raise it if background noise keeps cutting her off.</td></tr>
   <tr><td><code>clap_wake</code></td><td>Clap detection as a backup wake signal.</td></tr>
+  <tr><td><code>push_to_talk</code></td><td>A system-wide hotkey such as <code>ctrl+alt+a</code>. Empty disables it.</td></tr>
   <tr><td><code>whisper_model</code></td><td><code>small.en</code> by default. Larger is more accurate and slower.</td></tr>
   <tr><td><code>continuation_listening</code></td><td>Keeps the mic open if you paused rather than finished.</td></tr>
 </table>
@@ -827,6 +830,57 @@
 <h4>Worth knowing</h4>
 <p><code>amy_data/</code> is personal and is excluded by <code>.gitignore</code> &mdash; do not commit it, and check the debug log for credentials before sharing it.</p>
 </div>
+      </div>
+
+
+      <div class="card">
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></div>
+        <h3>Routines</h3>
+        <p>Things that run on a schedule, in her own words. &ldquo;Every day at 8, brief me on the weather&rdquo; &mdash; and a routine can do anything you could say out loud.</p>
+        <span class="more">Read more</span>
+        <div class="detail" hidden>
+<p>A routine is just a command with a time attached. Because it runs through the same dispatch path as speech, anything you can ask for can be scheduled.</p>
+<h4>How to set one up</h4>
+<ul>
+  <li><em>&ldquo;Every day at 8, brief me on the weather and my calendar&rdquo;</em></li>
+  <li><em>&ldquo;Weekdays at 9am, check my email&rdquo;</em></li>
+  <li><em>&ldquo;Every evening at 6, summarise what I downloaded today&rdquo;</em></li>
+  <li><em>&ldquo;List routines&rdquo;</em> &mdash; see everything scheduled</li>
+  <li><em>&ldquo;Remove the routine morning brief&rdquo;</em></li>
+</ul>
+<h4>Worth knowing</h4>
+<p>Routines run whatever your <code>proactive.level</code> is, including <code>off</code> &mdash; a routine is an explicit instruction, not a nudge, so quiet hours and the interruption ceiling don&rsquo;t suppress it. They live under <code>routines</code> in the config, so you can edit them by hand:</p>
+<pre><code>"routines": [
+  { "name": "morning brief", "at": "08:00",
+    "days": "weekdays", "command": "brief me on the weather",
+    "enabled": true }
+]</code></pre>
+<p><code>days</code> accepts <code>daily</code>, <code>weekdays</code>, <code>weekends</code>, or a list of day numbers where Monday is 0.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l2 2 4-4"/><path d="M4 19V5a2 2 0 0 1 2-2h11l3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg></div>
+        <h3>An audit trail</h3>
+        <p>Every plan approved or refused, every message sent, every app driven — written to disk as it happens. Software that can click buttons for you should be able to show its receipts.</p>
+        <span class="more">Read more</span>
+        <div class="detail" hidden>
+<p>Amy can drive your applications, send mail and write files. That only works if you can check what she actually did, so every outward action is appended to a log the moment it happens.</p>
+<h4>How to read it</h4>
+<ul>
+  <li><em>&ldquo;What have you done today?&rdquo;</em></li>
+  <li><em>&ldquo;Show me the action log for the last 6 hours&rdquo;</em></li>
+</ul>
+<h4>What gets recorded</h4>
+<table>
+  <tr><td><code>approval</code></td><td>Plans you approved, refused, or that timed out unanswered.</td></tr>
+  <tr><td><code>automation</code></td><td>Agent tasks and application control.</td></tr>
+  <tr><td><code>message</code></td><td>Email and texts, with the recipient and subject.</td></tr>
+  <tr><td><code>system</code></td><td>Routines firing, cameras changing, the hotkey being pressed.</td></tr>
+</table>
+<h4>Worth knowing</h4>
+<p>It lives at <code>amy_data/actions.jsonl</code> &mdash; one JSON object per line, flushed immediately, so a crash can&rsquo;t lose the record of what happened before it. It never leaves your machine, and it is excluded from version control along with the rest of <code>amy_data/</code>.</p>
+        </div>
       </div>
 
       <div class="card">
