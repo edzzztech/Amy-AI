@@ -22,6 +22,17 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
 
+    <!-- Package visibility: without this, Android 11+ hides the speech and
+         text-to-speech services and isRecognitionAvailable() returns false. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".AmyApp"
         android:allowBackup="false"
