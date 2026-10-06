@@ -84,7 +84,7 @@ class Attachments(private val context: Context) {
     }
 
     /** Name and size in one query. */
-    private fun describe(uri: Uri): Pair<String, Long> {
+    fun describe(uri: Uri): Pair<String, Long> {
         val fallback = uri.lastPathSegment ?: "file"
         return runCatching {
             context.contentResolver.query(

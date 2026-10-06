@@ -14,6 +14,8 @@ data class Turn(
     val role: String,          // "you" or "amy"
     val text: String,
     val at: String,
+    /** A picture shown in the message: a file name in [Conversations.pictures]. */
+    val image: String? = null,
 )
 
 @Serializable
@@ -45,6 +47,9 @@ data class Conversation(
 class Conversations(context: Context) {
 
     private val dir = File(context.filesDir, "conversations").apply { mkdirs() }
+
+    /** Pictures shown in conversations, kept with them in the app's private storage. */
+    val pictures = File(context.filesDir, "pictures")
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
 
     private var current: Conversation? = null
@@ -66,14 +71,14 @@ class Conversations(context: Context) {
     @Synchronized
     fun currentOrStart(): Conversation = current ?: start()
 
-    /** Add a turn and write the whole conversation back. */
+    /** Add a turn and write the whole conversation back. A picture may stand alone. */
     @Synchronized
-    fun append(role: String, text: String) {
+    fun append(role: String, text: String, image: String? = null) {
         val clean = text.trim()
-        if (clean.isEmpty()) return
+        if (clean.isEmpty() && image == null) return
         val base = currentOrStart()
-        val title = if (base.turns.isEmpty() && role == "you") clean.take(48) else base.title
-        val updated = base.copy(title = title, turns = base.turns + Turn(role, clean, now()))
+        val title = if (base.turns.isEmpty() && role == "you") clean.take(48).ifEmpty { "Picture" } else base.title
+        val updated = base.copy(title = title, turns = base.turns + Turn(role, clean, now(), image))
         current = updated
         save(updated)
     }
@@ -89,8 +94,22 @@ class Conversations(context: Context) {
     fun load(id: String): Conversation? =
         (index()[id] ?: read(File(dir, "$id.json")))?.also { current = it }
 
+    /** Keep a picture for the conversation; its file name, or null if it could not be saved. */
+    fun savePicture(bytes: ByteArray): String? = try {
+        pictures.mkdirs()
+        var name = "p${System.currentTimeMillis()}.png"
+        while (File(pictures, name).exists()) name = "x$name"
+        File(pictures, name).writeBytes(bytes)
+        name
+    } catch (e: Exception) {
+        null
+    }
+
     @Synchronized
     fun delete(id: String) {
+        (index()[id] ?: read(File(dir, "$id.json")))?.turns?.mapNotNull { it.image }?.forEach {
+            runCatching { File(pictures, it).delete() }
+        }
         runCatching { File(dir, "$id.json").delete() }
         index().remove(id)
         if (current?.id == id) current = null

@@ -12,6 +12,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -31,6 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
@@ -47,6 +53,7 @@ import io.github.edzzztech.amy.ui.Sym
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Calendar
 
 class MainActivity : ComponentActivity() {
@@ -122,6 +129,14 @@ class MainActivity : ComponentActivity() {
     private fun attach(uri: Uri) {
         val reader = Attachments(this)
         lifecycleScope.launch {
+            // A model file is installed, not read: the way to get one onto
+            // the phone without a computer.
+            val (name, _) = withContext(Dispatchers.IO) { reader.describe(uri) }
+            if (LocalModel.isModelName(name)) {
+                AmyState.setProblem(null)
+                Amy.installModel(uri, name)
+                return@launch
+            }
             // A picture goes to the model as a picture, for one that can see.
             if (contentResolver.getType(uri)?.startsWith("image/") == true) {
                 val picture = withContext(Dispatchers.IO) { Pictures.fromUri(this@MainActivity, uri) }
@@ -133,7 +148,6 @@ class MainActivity : ComponentActivity() {
                 Amy.actions.record("file", "Attached a picture")
                 Amy.askAboutImage(
                     picture,
-                    shown = "Attached a picture",
                     question = "What's in this picture? Mention anything that stands out.",
                     spoken = false,
                 )
@@ -315,6 +329,7 @@ private fun Home(
     val reply by AmyState.reply.collectAsState()
     val turns by AmyState.turns.collectAsState()
     val problem by AmyState.problem.collectAsState()
+    val installing by Amy.installing.collectAsState()
     var draft by remember { mutableStateOf("") }
 
     // The orb shrinks out of the way once there is a conversation to read,
@@ -411,6 +426,11 @@ private fun Home(
                         color = Muted,
                         modifier = Modifier.padding(top = 14.dp),
                     )
+                }
+
+                installing?.let {
+                    Spacer(Modifier.height(12.dp))
+                    Text(it, fontSize = 13.sp, textAlign = TextAlign.Center, color = Muted)
                 }
 
                 problem?.let {
@@ -550,7 +570,11 @@ private fun Bubble(turn: Turn, streaming: Boolean = false) {
             )
             Spacer(Modifier.height(6.dp))
         }
-        Surface(
+        turn.image?.let { name ->
+            Picture(name)
+            if (turn.text.isNotEmpty()) Spacer(Modifier.height(6.dp))
+        }
+        if (turn.text.isNotEmpty()) Surface(
             color = if (mine) MaterialTheme.colorScheme.surface else Color.Transparent,
             shape = RoundedCornerShape(
                 topStart = 20.dp,
@@ -570,6 +594,43 @@ private fun Bubble(turn: Turn, streaming: Boolean = false) {
                 ),
             )
         }
+    }
+}
+
+/**
+ * A picture in the conversation. Decoded off the main thread and small: the
+ * file is at most 768 pixels a side, and it is shown at a fraction of that.
+ */
+@Composable
+private fun Picture(name: String) {
+    val context = LocalContext.current
+    val bitmap by produceState<ImageBitmap?>(null, name) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val file = File(File(context.filesDir, "pictures"), name)
+                BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = 2 })
+                    ?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+    val shown = bitmap
+    if (shown == null) {
+        Box(
+            Modifier
+                .size(220.dp, 160.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surface)
+        )
+    } else {
+        Image(
+            bitmap = shown,
+            contentDescription = "Picture",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .widthIn(max = 240.dp)
+                .heightIn(max = 300.dp)
+                .clip(RoundedCornerShape(18.dp)),
+        )
     }
 }
 

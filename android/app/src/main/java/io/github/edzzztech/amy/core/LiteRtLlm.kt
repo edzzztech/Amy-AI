@@ -160,6 +160,11 @@ class LiteRtLlm(context: Context) : LlmEngine {
         }
         return try {
             created.initialize()
+            // The GPU is only really started by the first conversation: an
+            // engine whose vision encoder cannot get one still initialises,
+            // then fails every request. Try one now, so the next setup in
+            // the list is used instead.
+            created.createConversation(ConversationConfig()).close()
             created
         } catch (e: Throwable) {
             runCatching { created.close() }

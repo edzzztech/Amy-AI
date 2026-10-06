@@ -138,3 +138,42 @@ class SentenceBuffer {
         )
     }
 }
+
+/**
+ * Strips a speaker label from the start of a reply. The conversation so far
+ * reaches the model as "User: ... / Amy: ..." lines, and models continue the
+ * pattern: tried with Gemma 3n, a follow-up came back as "Amy: There are 3
+ * days until Friday", and she read her own name out. Text is held back only
+ * while it could still turn out to be a label.
+ */
+class SpeakerTag {
+    private val held = StringBuilder()
+    private var decided = false
+
+    fun push(text: String): String {
+        if (decided) return text
+        held.append(text)
+        val start = held.trimStart().toString()
+        TAG.find(start)?.let {
+            decided = true
+            held.setLength(0)
+            return start.substring(it.range.last + 1)
+        }
+        val squeezed = start.lowercase().replace(" ", "")
+        if (start.length < LONGEST && LABELS.any { it.startsWith(squeezed) }) return ""
+        decided = true
+        return held.toString().also { held.setLength(0) }
+    }
+
+    /** Whatever is still held when the reply ends. */
+    fun flush(): String {
+        decided = true
+        return held.toString().also { held.setLength(0) }
+    }
+
+    private companion object {
+        val LABELS = listOf("amy:", "assistant:", "model:")
+        const val LONGEST = 14
+        val TAG = Regex("^(?:amy|assistant|model)\\s*:\\s*", RegexOption.IGNORE_CASE)
+    }
+}

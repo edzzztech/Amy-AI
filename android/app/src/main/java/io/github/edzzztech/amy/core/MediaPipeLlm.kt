@@ -2,6 +2,8 @@ package io.github.edzzztech.amy.core
 
 import android.content.Context
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
+import com.google.mediapipe.tasks.genai.llminference.PromptTemplates
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -10,6 +12,8 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -32,6 +36,17 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * So a single permit guards the engine, and a generation releases it only when
  * the native side reports done — not when the collector stops listening.
+ *
+ * ## The chat format, and "I have no answer for that"
+ *
+ * Gemma answers only when the question is wrapped in its turn markers. Newer
+ * .task bundles carry those markers and MediaPipe adds them itself, so
+ * wrapping the prompt by hand as well doubled them: the model saw an empty
+ * turn of its own, took the conversation as over, and said nothing. Each
+ * request now runs in a session told the markers explicitly, so they are
+ * applied once whatever the bundle holds. Should a model still answer with
+ * nothing, the next request tries the next [Format], and the first that
+ * works is kept.
  */
 class MediaPipeLlm(context: Context) : LlmEngine {
 
@@ -47,6 +62,16 @@ class MediaPipeLlm(context: Context) : LlmEngine {
         private set
 
     private val busy = Semaphore(1)
+
+    private enum class Format { TEMPLATED, BUNDLE, MANUAL }
+
+    /** How prompts are wrapped; moves on when a model answers with nothing. */
+    @Volatile private var format = Format.TEMPLATED
+
+    /** Sessions are closed here, never on the engine's own callback thread. */
+    private val closer = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "mediapipe-close").apply { isDaemon = true }
+    }
 
     override val fileExtension = "task"
 
@@ -168,23 +193,50 @@ class MediaPipeLlm(context: Context) : LlmEngine {
             }
 
             cancelled = false
+            val using = format
+            val session = try {
+                LlmInferenceSession.createFromOptions(llm, sessionOptions(using))
+            } catch (e: Throwable) {
+                busy.release()
+                close(e)
+                return@callbackFlow
+            }
             // Touched from the native callback thread and from the catch below.
             val released = AtomicBoolean(false)
-            fun releaseOnce() {
-                if (released.compareAndSet(false, true)) busy.release()
+            val said = AtomicBoolean(false)
+            fun finish(error: Throwable?) {
+                if (!released.compareAndSet(false, true)) return
+                if (error == null && !said.get() && !cancelled) format = next(using)
+                closer.execute {
+                    runCatching { session.close() }
+                    busy.release()
+                }
+                if (error == null) close() else close(error)
             }
 
             try {
-                llm.generateResponseAsync(chatPrompt(prompt, system)) { partial: String, done: Boolean ->
+                session.addQueryChunk(
+                    if (using == Format.MANUAL) chatPrompt(prompt, system) else plainPrompt(prompt, system)
+                )
+                val future = session.generateResponseAsync { partial: String, done: Boolean ->
+                    if (partial.isNotBlank()) said.set(true)
                     if (!cancelled && partial.isNotEmpty()) trySend(partial)
-                    if (done) {
-                        releaseOnce()
-                        close()
-                    }
+                    if (done) finish(null)
                 }
+                // A native failure ends the future without a done callback;
+                // without this the permit was never returned and she went
+                // quiet for good.
+                future.addListener({
+                    try {
+                        future.get()            // success: the done callback finishes
+                    } catch (e: ExecutionException) {
+                        finish(e.cause ?: e)
+                    } catch (e: Throwable) {
+                        finish(e)
+                    }
+                }, closer)
             } catch (e: Throwable) {
-                releaseOnce()
-                close(e)
+                finish(e)
             }
 
             // The collector going away only stops us forwarding text; the
@@ -214,6 +266,36 @@ class MediaPipeLlm(context: Context) : LlmEngine {
         engine = null
         loadedPath = null
         maxTokens = 0
+    }
+
+    private fun next(f: Format): Format = Format.entries[(f.ordinal + 1) % Format.entries.size]
+
+    private fun sessionOptions(f: Format): LlmInferenceSession.LlmInferenceSessionOptions {
+        val b = LlmInferenceSession.LlmInferenceSessionOptions.builder()
+            .setTopK(TOP_K)
+            .setTemperature(TEMPERATURE)
+        if (f == Format.TEMPLATED) {
+            b.setPromptTemplates(
+                PromptTemplates.builder()
+                    .setUserPrefix("<start_of_turn>user\n")
+                    .setUserSuffix("<end_of_turn>\n")
+                    .setModelPrefix("<start_of_turn>model\n")
+                    .setModelSuffix("<end_of_turn>\n")
+                    // Gemma has no system turn: the instructions go in the user's.
+                    .setSystemPrefix("")
+                    .setSystemSuffix("")
+                    .build()
+            )
+        }
+        return b.build()
+    }
+
+    /** The instructions and the prompt, for a session that adds the markers itself. */
+    private fun plainPrompt(prompt: String, system: String?): String {
+        val sys = system?.trim().orEmpty()
+        val room = promptRoom(sys)
+        val body = prompt.trim().let { if (it.length > room) "…" + it.takeLast(room) else it }
+        return if (sys.isEmpty()) body else "$sys\n\n$body"
     }
 
     /**
@@ -269,6 +351,10 @@ class MediaPipeLlm(context: Context) : LlmEngine {
         private const val CHARS_PER_TOKEN = 3
 
         private const val WAIT_FOR_ENGINE_MS = 45_000L
+
+        // Steady rather than inventive, as on the LiteRT-LM side.
+        private const val TOP_K = 40
+        private const val TEMPERATURE = 0.7f
 
         private const val RETRY_FAILED_MS = 10 * 60_000L
     }

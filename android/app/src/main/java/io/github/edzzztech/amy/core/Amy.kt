@@ -2,10 +2,14 @@ package io.github.edzzztech.amy.core
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.net.Uri
 import io.github.edzzztech.amy.automation.Commands
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,6 +56,15 @@ object Amy {
 
     var tts: Tts? = null
         private set
+
+    private val web = WebSearch()
+
+    /** Model installs run apart from [brain], so she can still talk meanwhile. */
+    private val installs = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Progress of a model being installed, for the screen; null when none is. */
+    private val _installing = MutableStateFlow<String?>(null)
+    val installing: StateFlow<String?> = _installing.asStateFlow()
 
     /**
      * Told when she starts and stops talking, so the listener can stop hearing
@@ -122,7 +135,56 @@ object Amy {
             deliver(reply, spoken)
             return
         }
+
+        // The web, for what a model on the phone cannot know: asked outright
+        // ("google ...", "look up ..."), or a question about news, prices,
+        // scores or the weather.
+        val asked = WebSearch.asked(clean)
+        if (asked != null || WebSearch.needsFreshAnswer(clean)) {
+            if (answerFromWeb(asked ?: clean, spoken, explicit = asked != null)) return
+        }
         converse(spoken) { withHistory(clean) }
+    }
+
+    /**
+     * Search, then answer from what was found, naming the sites under the
+     * reply. False when nothing came back and the question was not an explicit
+     * search, so the model can still try from what it knows.
+     */
+    private suspend fun answerFromWeb(query: String, spoken: Boolean, explicit: Boolean): Boolean {
+        AmyState.setReply("Searching the web")
+        val found = web.lookUp(query)
+        AmyState.setReply("")
+        when (found) {
+            is WebSearch.Found.Answer -> {
+                actions.record("web", "Looked up: $query", detail = found.source)
+                deliver(found.text, spoken, sources = listOf(found.source))
+                return true
+            }
+            is WebSearch.Found.Results -> {
+                actions.record("web", "Searched: $query")
+                val sites = found.results.map { it.site }.distinct().take(3)
+                if (!llm.ensureLoaded()) {
+                    // No model to summarise with: the best result, as found.
+                    val top = found.results.first()
+                    deliver(top.snippet.ifBlank { top.title }, spoken, sources = listOf(top.site))
+                    return true
+                }
+                stream(spoken, sites) { system ->
+                    llm.generate(WebSearch.prompt(query, found.results, llm.promptRoom(system)), system)
+                }
+                return true
+            }
+            WebSearch.Found.Nothing -> if (explicit) {
+                deliver("I searched, but found nothing useful for that.", spoken)
+                return true
+            }
+            WebSearch.Found.Offline -> if (explicit) {
+                deliver("I couldn't reach the web just now. Check the phone is online.", spoken)
+                return true
+            }
+        }
+        return false
     }
 
     /**
@@ -141,14 +203,15 @@ object Amy {
     }
 
     /**
-     * Ask about a picture: a photo from the camera, or an attached image.
-     * Needs a model that can see (Gemma 3n); with any other she says so,
-     * rather than guessing at a picture she cannot look at.
+     * Ask about a picture: a photo from the camera, or an attached image. The
+     * picture appears in the conversation, and her answer under it. Needs a
+     * model that can see (Gemma 3n); with any other she says so, rather than
+     * guessing at a picture she cannot look at.
      */
-    fun askAboutImage(image: ByteArray, shown: String, question: String, spoken: Boolean) {
+    fun askAboutImage(image: ByteArray, question: String, spoken: Boolean, caption: String = "") {
         AmyState.setState(Listening.Thinking)
         scope.launch {
-            conversations.append("you", shown)
+            conversations.append("you", caption, image = conversations.savePicture(image))
             AmyState.setTurns(conversations.turns())
             if (!llm.ensureLoaded()) {
                 deliver(llm.unavailableReason(), spoken = false)
@@ -179,8 +242,15 @@ object Amy {
     private suspend fun converse(spoken: Boolean, prompt: (room: Int) -> String) =
         stream(spoken) { system -> llm.generate(prompt(llm.promptRoom(system)), system) }
 
-    /** Load the model if need be, then speak and show the reply [source] streams. */
-    private suspend fun stream(spoken: Boolean, source: (system: String) -> Flow<String>) {
+    /**
+     * Load the model if need be, then speak and show the reply [source]
+     * streams. [sources] are named under the reply on screen, not spoken.
+     */
+    private suspend fun stream(
+        spoken: Boolean,
+        sources: List<String> = emptyList(),
+        source: (system: String) -> Flow<String>,
+    ) {
         if (!llm.ensureLoaded()) {
             deliver(llm.unavailableReason(), spoken = false)
             return
@@ -192,26 +262,42 @@ object Amy {
         val buffer = SentenceBuffer()
         val whole = StringBuilder()
         val system = systemPrompt()
-        try {
-            source(system).collect { token ->
-                if (tts?.turn != turn) {
-                    llm.cancel()            // interrupted: stop forwarding text
-                    return@collect
+
+        fun take(text: String) {
+            if (text.isEmpty()) return
+            whole.append(text)
+            if (spoken) buffer.push(text).forEach { tts?.speak(it, turn) }
+            AmyState.setReply(whole.toString())
+        }
+
+        // An empty reply is asked once more: a model that says nothing has
+        // usually been handed its prompt in a format it does not expect, and
+        // the engine tries another on the next request.
+        var attempts = 0
+        while (true) {
+            val tag = SpeakerTag()
+            try {
+                source(system).collect { token ->
+                    if (tts?.turn != turn) {
+                        llm.cancel()            // interrupted: stop forwarding text
+                        return@collect
+                    }
+                    take(tag.push(scrub(token)))
                 }
-                val clean = scrub(token)
-                if (clean.isEmpty()) return@collect
-                whole.append(clean)
-                if (spoken) buffer.push(clean).forEach { tts?.speak(it, turn) }
-                AmyState.setReply(whole.toString())
+                take(tag.flush())
+            } catch (e: Throwable) {
+                AmyState.setReply("")
+                deliver("Something went wrong while thinking: ${e.message ?: "unknown error"}", false)
+                return
             }
-        } catch (e: Throwable) {
-            AmyState.setReply("")
-            deliver("Something went wrong while thinking: ${e.message ?: "unknown error"}", false)
-            return
+            if (whole.isNotBlank() || tts?.turn != turn || ++attempts > 1) break
         }
         if (spoken) buffer.flush().takeIf { it.isNotEmpty() }?.let { tts?.speak(it, turn) }
 
-        val reply = whole.toString().trim().ifEmpty { "I have no answer for that." }
+        val answered = whole.toString().trim()
+        val reply = if (answered.isEmpty()) {
+            "I couldn't come up with an answer to that. Try asking another way."
+        } else answered + sourceLine(sources)
         conversations.append("amy", reply)
         AmyState.setTurns(conversations.turns())
         AmyState.setReply("")
@@ -266,8 +352,12 @@ object Amy {
         }
     }
 
-    private suspend fun deliver(reply: String, spoken: Boolean) {
-        conversations.append("amy", reply)
+    /** "Sources: bbc.co.uk, wikipedia.org", shown under a reply from the web. */
+    private fun sourceLine(sources: List<String>): String =
+        if (sources.isEmpty()) "" else "\n\nSources: " + sources.joinToString(", ")
+
+    private suspend fun deliver(reply: String, spoken: Boolean, sources: List<String> = emptyList()) {
+        conversations.append("amy", reply + sourceLine(sources))
         AmyState.setTurns(conversations.turns())
         AmyState.setHistory(conversations.list())
         if (spoken) tts?.speak(reply) else AmyState.setState(AmyState.settled())
@@ -295,6 +385,39 @@ object Amy {
     fun stopSpeaking() {
         tts?.stop()
         llm.cancel()
+    }
+
+    /**
+     * Install a model file picked on the phone - one downloaded in the
+     * browser, or copied over USB - so no computer or adb is needed. It is
+     * copied into the model folder under a temporary name and renamed once
+     * whole, so a half-copied file is never loaded, then loaded straight away.
+     */
+    fun installModel(uri: Uri, name: String) {
+        if (_installing.value != null) return
+        _installing.value = "Installing $name"
+        installs.launch {
+            val problem = llm.install(uri, name) { percent ->
+                _installing.value = "Installing $name: $percent%"
+            }
+            _installing.value = null
+            if (problem != null) {
+                AmyState.setProblem(problem)
+                actions.record("model", "Install failed: $name", outcome = "failed", detail = problem)
+                return@launch
+            }
+            actions.record("model", "Installed $name")
+            scope.launch {
+                llm.reload()
+                val ready = llm.ensureLoaded()
+                deliver(
+                    if (!ready) llm.unavailableReason()
+                    else if (llm.supportsVision) "$name is installed and loaded. I can see pictures now."
+                    else "$name is installed and loaded.",
+                    spoken = false,
+                )
+            }
+        }
     }
 
     /** Load the model before it is first asked for, so the first reply is not slow. */

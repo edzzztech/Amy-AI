@@ -50,8 +50,8 @@ import java.time.format.DateTimeFormatter
  * Camera mode: the phone's version of the desktop's desk view.
  *
  * Captures to the app's own storage and records the shot in the action log.
- * With a model that can see (Gemma 3n), the photo then goes to her and she
- * says what is in it; with any other, the photo is simply saved.
+ * The photo then appears in the conversation. With a model that can see
+ * (Gemma 3n) she says what is in it; with any other she says why she can't.
  */
 class CameraActivity : ComponentActivity() {
 
@@ -144,17 +144,12 @@ class CameraActivity : ComponentActivity() {
     }
 
     /**
-     * Describe the photo when the model can see, and say it aloud: the camera
-     * was opened to ask about something. The answer appears in the
-     * conversation as the camera closes.
+     * Put the photo in the conversation and have her describe it aloud: the
+     * camera was opened to ask about something. The photo and her answer are
+     * there as the camera closes.
      */
     private fun onCaptured(file: File) {
         Amy.actions.record("device", "Photo taken: ${file.name}")
-        if (!canSee) {
-            Amy.tts?.speak("Saved.")
-            finish()
-            return
-        }
         lifecycleScope.launch {
             val picture = withContext(Dispatchers.IO) { Pictures.fromFile(file) }
             if (picture == null) {
@@ -162,7 +157,6 @@ class CameraActivity : ComponentActivity() {
             } else {
                 Amy.askAboutImage(
                     picture,
-                    shown = "Photo",
                     question = "Describe what you see in a sentence or two.",
                     spoken = true,
                 )
