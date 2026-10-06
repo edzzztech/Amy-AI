@@ -61,9 +61,11 @@ dependencies {
     // On-device inference. A Maven dependency rather than an NDK build
     // of llama.cpp; LlmEngine is the seam if we ever need to swap it.
     //
-    // Held at the version proven on a real phone. A native inference engine
-    // can change behaviour that compiling cannot reveal, so it moves together
-    // with the vision model, which needs a newer one and a phone to test on.
+    // Held at the version proven on a real phone. Checked against 0.10.35:
+    // it deprecates LlmInference in favour of Google's LiteRT-LM, and its
+    // image input needs com.google.mediapipe:tasks-core, which brings
+    // Google's data-transport (logging) libraries into an app that promises
+    // to send nothing. Vision (Gemma 3n) belongs on LiteRT-LM instead.
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
 
     // Camera mode
