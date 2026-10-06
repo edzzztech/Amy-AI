@@ -34,7 +34,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import io.github.edzzztech.amy.core.Amy
+import io.github.edzzztech.amy.core.Pictures
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import io.github.edzzztech.amy.ui.Icon
 import io.github.edzzztech.amy.ui.Sym
 import java.io.File
@@ -45,10 +50,8 @@ import java.time.format.DateTimeFormatter
  * Camera mode: the phone's version of the desktop's desk view.
  *
  * Captures to the app's own storage and records the shot in the action log.
- * What it does *not* yet do is describe what it sees — that needs a
- * vision-capable model, and the text-only Gemma build loaded here cannot do
- * it. The capture path is built so that when a vision model is dropped in,
- * only [onCaptured] changes.
+ * With a model that can see (Gemma 3n), the photo then goes to her and she
+ * says what is in it; with any other, the photo is simply saved.
  */
 class CameraActivity : ComponentActivity() {
 
@@ -60,6 +63,9 @@ class CameraActivity : ComponentActivity() {
      * failed while the prompt was up, and stayed black after "Allow".
      */
     private var allowed by mutableStateOf(false)
+
+    /** Whether the model on the phone can describe a photo. Read off the main thread. */
+    private var canSee by mutableStateOf(false)
 
     private val requestCamera = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -73,11 +79,15 @@ class CameraActivity : ComponentActivity() {
         allowed = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
         if (!allowed) requestCamera.launch(Manifest.permission.CAMERA)
+        lifecycleScope.launch {
+            canSee = withContext(Dispatchers.IO) { Amy.llm.canSee() }
+        }
 
         setContent {
             AmyTheme {
                 CameraScreen(
                     allowed = allowed,
+                    canSee = canSee,
                     onBind = { view, lensFacing -> bind(view, lensFacing) },
                     onShutter = ::takePhoto,
                     onClose = { finish() },
@@ -133,11 +143,32 @@ class CameraActivity : ComponentActivity() {
         )
     }
 
-    /** The seam a vision model drops into later. */
+    /**
+     * Describe the photo when the model can see, and say it aloud: the camera
+     * was opened to ask about something. The answer appears in the
+     * conversation as the camera closes.
+     */
     private fun onCaptured(file: File) {
         Amy.actions.record("device", "Photo taken: ${file.name}")
-        Amy.tts?.speak("Saved.")
-        finish()
+        if (!canSee) {
+            Amy.tts?.speak("Saved.")
+            finish()
+            return
+        }
+        lifecycleScope.launch {
+            val picture = withContext(Dispatchers.IO) { Pictures.fromFile(file) }
+            if (picture == null) {
+                Amy.tts?.speak("Saved, but I couldn't read the photo back.")
+            } else {
+                Amy.askAboutImage(
+                    picture,
+                    shown = "Photo",
+                    question = "Describe what you see in a sentence or two.",
+                    spoken = true,
+                )
+            }
+            finish()
+        }
     }
 
     companion object {
@@ -152,6 +183,7 @@ class CameraActivity : ComponentActivity() {
 @Composable
 private fun CameraScreen(
     allowed: Boolean,
+    canSee: Boolean,
     onBind: (PreviewView, Int) -> Unit,
     onShutter: () -> Unit,
     onClose: () -> Unit,
@@ -212,7 +244,8 @@ private fun CameraScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                "Describing what she sees needs a vision model",
+                if (canSee) "Take a photo and I'll tell you what's in it"
+                else "Photos are saved. To describe them I need a Gemma 3n model",
                 fontSize = 11.sp,
                 color = Color(0x99FFFFFF),
                 textAlign = TextAlign.Center,

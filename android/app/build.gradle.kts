@@ -47,6 +47,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("androidx.lifecycle:lifecycle-service:2.10.0")
     implementation("androidx.activity:activity-compose:1.13.0")
+    // Reading which way up a photo is, with fixes the built-in reader lacks.
+    implementation("androidx.exifinterface:exifinterface:1.4.2")
 
     val compose = platform("androidx.compose:compose-bom:2026.06.01")
     implementation(compose)
@@ -67,6 +69,11 @@ dependencies {
     // Google's data-transport (logging) libraries into an app that promises
     // to send nothing. Vision (Gemma 3n) belongs on LiteRT-LM instead.
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
+
+    // .litertlm models, and the one that can see (Gemma 3n). Checked before
+    // adding: it depends only on Gson, Kotlin reflection and coroutines, and
+    // its native code has no logging or telemetry endpoints.
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.17.1")
 
     // Camera mode
     val camerax = "1.6.2"

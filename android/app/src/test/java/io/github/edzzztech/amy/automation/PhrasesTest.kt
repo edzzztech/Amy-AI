@@ -65,6 +65,12 @@ class PhrasesTest {
         assertTrue(Phrases.asksBattery(cmd("how much battery have I got")))
         assertTrue(Phrases.asksAppCount(cmd("How many apps can you see?")))
         assertTrue(Phrases.asksScreen(cmd("What's on my screen?")))
+        assertTrue(Phrases.asksToLook(cmd("What am I looking at?")))
+        assertTrue(Phrases.asksToLook(cmd("Could you take a look at this?")))
+        assertTrue(Phrases.asksToLook(cmd("what can you see")))
+        // The screen is a different question, and "this" alone is too vague.
+        assertFalse(Phrases.asksToLook(cmd("what can you see on my screen")))
+        assertFalse(Phrases.asksToLook(cmd("what's this")))
         assertEquals(24, Phrases.actionLogHours(cmd("What have you done today?")))
         assertEquals(3, Phrases.actionLogHours(cmd("what have you done in the last 3 hours")))
         assertNull(Phrases.actionLogHours(cmd("what have you done to my phone")))

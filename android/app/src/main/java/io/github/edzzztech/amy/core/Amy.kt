@@ -6,6 +6,7 @@ import io.github.edzzztech.amy.automation.Commands
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
@@ -44,7 +45,7 @@ object Amy {
     lateinit var commands: Commands
         private set
     @SuppressLint("StaticFieldLeak")
-    lateinit var llm: MediaPipeLlm
+    lateinit var llm: LocalModel
         private set
     lateinit var desktop: DesktopLink
         private set
@@ -71,7 +72,7 @@ object Amy {
         actions = ActionLog(app)
         conversations = Conversations(app)
         commands = Commands(app, actions)
-        llm = MediaPipeLlm(app)
+        llm = LocalModel(app)
         desktop = DesktopLink(app)
         tts = Tts(app).also { engine ->
             engine.onSpeakStart = {
@@ -140,19 +141,48 @@ object Amy {
     }
 
     /**
-     * Load the model if need be, then stream a reply. [prompt] is built only
-     * once the model is loaded, from the room it actually has, so long input
-     * can be sized to fit instead of being cut blindly.
+     * Ask about a picture: a photo from the camera, or an attached image.
+     * Needs a model that can see (Gemma 3n); with any other she says so,
+     * rather than guessing at a picture she cannot look at.
      */
-    private suspend fun converse(spoken: Boolean, prompt: (room: Int) -> String) {
-        if (!llm.ensureLoaded()) {
-            val message = if (llm.findModel() == null) {
-                "I have no model yet. Put a .task model in ${llm.expectedPath()}."
-            } else {
-                "I found a model but couldn't load it. It may be the wrong format, " +
-                    "or too large for this phone's memory."
+    fun askAboutImage(image: ByteArray, shown: String, question: String, spoken: Boolean) {
+        AmyState.setState(Listening.Thinking)
+        scope.launch {
+            conversations.append("you", shown)
+            AmyState.setTurns(conversations.turns())
+            if (!llm.ensureLoaded()) {
+                deliver(llm.unavailableReason(), spoken = false)
+                return@launch
             }
-            deliver(message, spoken = false)
+            if (!llm.supportsVision) {
+                // Two different problems: the wrong model, or the right one on
+                // a phone whose GPU its vision part could not start on.
+                val why = if (llm.canSee()) {
+                    "My model can see, but it needs this phone's graphics chip, which I " +
+                        "couldn't use. I can still talk."
+                } else {
+                    "I can't see pictures with the model I have. A Gemma 3n model in " +
+                        "${llm.expectedPath()} would let me."
+                }
+                deliver(why, spoken)
+                return@launch
+            }
+            stream(spoken) { system -> llm.describe(image, question, system) }
+        }
+    }
+
+    /**
+     * Stream a reply to text. [prompt] is built only once the model is
+     * loaded, from the room it actually has, so long input can be sized to
+     * fit instead of being cut blindly.
+     */
+    private suspend fun converse(spoken: Boolean, prompt: (room: Int) -> String) =
+        stream(spoken) { system -> llm.generate(prompt(llm.promptRoom(system)), system) }
+
+    /** Load the model if need be, then speak and show the reply [source] streams. */
+    private suspend fun stream(spoken: Boolean, source: (system: String) -> Flow<String>) {
+        if (!llm.ensureLoaded()) {
+            deliver(llm.unavailableReason(), spoken = false)
             return
         }
 
@@ -163,7 +193,7 @@ object Amy {
         val whole = StringBuilder()
         val system = systemPrompt()
         try {
-            llm.generate(prompt(llm.promptRoom(system)), system = system).collect { token ->
+            source(system).collect { token ->
                 if (tts?.turn != turn) {
                     llm.cancel()            // interrupted: stop forwarding text
                     return@collect

@@ -911,15 +911,15 @@
 <h4>What it does</h4>
 <ul>
   <li>Listens for &ldquo;Amy&rdquo; continuously, with a conversation window so follow-ups don&rsquo;t need her name.</li>
-  <li>Runs a small local model through MediaPipe, with GPU acceleration.</li>
+  <li>Runs a small local model with GPU acceleration &mdash; and with Gemma&nbsp;3n it can see, describing photos you take or pictures you attach.</li>
   <li>Opens apps, taps by name and types, through Android&rsquo;s accessibility service. Root is optional and only adds to it.</li>
   <li>Floats an orb over other apps &mdash; drag it, tap to open, long-press to sleep.</li>
   <li>Camera capture, file attachments and conversation history.</li>
 </ul>
 <h4>What does not carry over</h4>
-<p>CAD, reading your PC&rsquo;s screen and Windows automation cannot cross to a phone. A handset also runs a 1&ndash;3B model against your desktop&rsquo;s much larger ones, so expect it to be faster but less capable. That is physics, not effort.</p>
+<p>CAD, reading your PC&rsquo;s screen and Windows automation cannot cross to a phone. A handset also runs a 1&ndash;4B model against your desktop&rsquo;s much larger ones, so expect it to be faster but less capable. That is physics, not effort.</p>
 <h4>Installing it</h4>
-<p>There is no Play Store build. Open the <code>android/</code> folder in Android Studio, run it on your phone, then push a MediaPipe <code>.task</code> model across. Full steps are in the <a href="#android" style="color:var(--accent)">Android section</a>.</p>
+<p>There is no Play Store build. Open the <code>android/</code> folder in Android Studio, run it on your phone, then push a model across &mdash; Gemma&nbsp;3n if you want her to see. Full steps are in the <a href="#android" style="color:var(--accent)">Android section</a>.</p>
         </div>
       </div>
 
@@ -1192,7 +1192,7 @@ ollama pull nomic-embed-text  <span class="cm"># memory search</span></pre></div
       </div>
       <div class="card">
         <h3>On-device model</h3>
-        <p>A small local model through MediaPipe with GPU acceleration. Nothing is sent anywhere, and it works in aeroplane mode.</p>
+        <p>A small local model with GPU acceleration. With Gemma&nbsp;3n she can see, too: photos from her camera and pictures you attach. Nothing is sent anywhere, and it works in aeroplane mode.</p>
       </div>
       <div class="card">
         <h3>Drives your apps</h3>
@@ -1230,9 +1230,9 @@ ollama pull nomic-embed-text  <span class="cm"># memory search</span></pre></div
 
       <div class="step">
         <div class="step-top"><span class="step-n"></span><h3>Give her a model</h3></div>
-        <p>Download a MediaPipe <code>.task</code> bundle &mdash; <a href="https://huggingface.co/litert-community/Gemma3-1B-IT" style="color:var(--accent)">Gemma 3 1B</a> is the sensible starting point at roughly 555&nbsp;MB. The repository is gated, so accept the Gemma licence on Hugging Face first, then push it across:</p>
-        <div class="pre-wrap"><button class="copy">copy</button><pre>adb push model.task /sdcard/Android/data/io.github.edzzztech.amy/files/</pre></div>
-        <p>Any <code>.task</code> file in that folder is picked up, so the name doesn&rsquo;t matter.</p>
+        <p>For talking, <a href="https://huggingface.co/litert-community/Gemma3-1B-IT" style="color:var(--accent)">Gemma 3 1B</a> is about 0.6&nbsp;GB. For her to see as well, <a href="https://huggingface.co/google/gemma-3n-E2B-it-litert-lm" style="color:var(--accent)">Gemma 3n E2B</a> is 3.7&nbsp;GB &mdash; take <code>gemma-3n-E2B-it-int4.litertlm</code>. Both are gated, so accept the Gemma licence on Hugging Face first, then push the file across:</p>
+        <div class="pre-wrap"><button class="copy">copy</button><pre>adb push gemma-3n-E2B-it-int4.litertlm /sdcard/Android/data/io.github.edzzztech.amy/files/</pre></div>
+        <p>A <code>.task</code> or <code>.litertlm</code> file in that folder is picked up whatever it&rsquo;s called.</p>
       </div>
 
       <div class="step">

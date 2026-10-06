@@ -122,11 +122,28 @@ class MainActivity : ComponentActivity() {
     private fun attach(uri: Uri) {
         val reader = Attachments(this)
         lifecycleScope.launch {
+            // A picture goes to the model as a picture, for one that can see.
+            if (contentResolver.getType(uri)?.startsWith("image/") == true) {
+                val picture = withContext(Dispatchers.IO) { Pictures.fromUri(this@MainActivity, uri) }
+                if (picture == null) {
+                    AmyState.setProblem("I couldn't open that picture.")
+                    return@launch
+                }
+                AmyState.setProblem(null)
+                Amy.actions.record("file", "Attached a picture")
+                Amy.askAboutImage(
+                    picture,
+                    shown = "Attached a picture",
+                    question = "What's in this picture? Mention anything that stands out.",
+                    spoken = false,
+                )
+                return@launch
+            }
             val file = withContext(Dispatchers.IO) { reader.read(uri) }
             if (!file.readable) {
                 AmyState.setProblem(
-                    "I can't read " + file.name + ". Text, Markdown, CSV, JSON, code " +
-                        "and Word documents are fine; PDFs need a parser I don't have yet."
+                    "I can't read " + file.name + ". Text, Markdown, CSV, JSON, code, " +
+                        "Word documents and pictures are fine; PDFs need a parser I don't have yet."
                 )
                 return@launch
             }

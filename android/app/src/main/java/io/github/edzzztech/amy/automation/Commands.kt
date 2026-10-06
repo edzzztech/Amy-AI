@@ -7,7 +7,9 @@ import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.os.BatteryManager
 import android.provider.AlarmClock
+import io.github.edzzztech.amy.CameraActivity
 import io.github.edzzztech.amy.core.ActionLog
+import io.github.edzzztech.amy.core.Amy
 import io.github.edzzztech.amy.core.RootShell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -47,8 +49,23 @@ class Commands(
         return answer(lower)
             ?: device(lower)
             ?: clock(lower)
+            ?: look(lower)
             ?: launch(lower)
             ?: onScreen(lower, Phrases.politeStartRemoved(input))
+    }
+
+    /** Open the camera to be shown something - if the model can see. */
+    private suspend fun look(lower: String): String? {
+        if (!Phrases.asksToLook(lower)) return null
+        // Reads the model file's metadata: not on the main thread.
+        if (!withContext(Dispatchers.IO) { Amy.llm.canSee() }) {
+            return "I can't see yet. With a Gemma 3n model on the phone, I could."
+        }
+        return when (apps.start(Intent(context, CameraActivity::class.java))) {
+            AppControl.Start.Started -> "Show me, and tap the button."
+            AppControl.Start.Blocked -> BLOCKED
+            AppControl.Start.Failed -> "I couldn't open the camera."
+        }
     }
 
     // --- things the phone knows ----------------------------------------------

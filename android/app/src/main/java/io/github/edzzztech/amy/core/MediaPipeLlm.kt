@@ -5,6 +5,7 @@ import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
@@ -47,6 +48,11 @@ class MediaPipeLlm(context: Context) : LlmEngine {
 
     private val busy = Semaphore(1)
 
+    override val fileExtension = "task"
+
+    /** MediaPipe's bundles here are text-only; pictures need [LiteRtLlm]. */
+    override val supportsVision = false
+
     override val isLoaded: Boolean
         get() = engine != null
 
@@ -60,7 +66,7 @@ class MediaPipeLlm(context: Context) : LlmEngine {
      * Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.task, and making someone rename
      * a 555 MB file is a pointless step to get wrong.
      */
-    fun findModel(): File? =
+    override fun findModel(): File? =
         modelDir()
             ?.listFiles { f -> f.isFile && f.extension.lowercase() == "task" && f.length() > 0 }
             ?.maxByOrNull { it.length() }
@@ -80,7 +86,7 @@ class MediaPipeLlm(context: Context) : LlmEngine {
     private fun keyOf(file: File) = "${file.absolutePath}|${file.length()}|${file.lastModified()}"
 
     /** Load the newest model if nothing is loaded yet. Safe to call repeatedly. */
-    suspend fun ensureLoaded(): Boolean {
+    override suspend fun ensureLoaded(): Boolean {
         if (engine != null) return true
         val file = findModel() ?: return false
         val key = keyOf(file)
@@ -97,7 +103,7 @@ class MediaPipeLlm(context: Context) : LlmEngine {
         return ok
     }
 
-    override suspend fun load(modelPath: String): Boolean = busy.withPermit {
+    private suspend fun load(modelPath: String): Boolean = busy.withPermit {
         // A second caller that queued behind the first finds the work done.
         if (engine != null && loadedPath == modelPath) return@withPermit true
 
@@ -134,7 +140,7 @@ class MediaPipeLlm(context: Context) : LlmEngine {
      * prefix off each chunk, which ate characters and produced fluent nonsense.
      * Deltas are appended as they arrive, and nothing else.
      */
-    override fun generate(prompt: String, system: String?, maxTokens: Int): Flow<String> =
+    override fun generate(prompt: String, system: String?): Flow<String> =
         callbackFlow {
             // Wait for any earlier run to finish natively, cancelled ones
             // included. A wedged engine must not hang her forever.
@@ -191,8 +197,12 @@ class MediaPipeLlm(context: Context) : LlmEngine {
         cancelled = true
     }
 
-    override fun unload() {
-        closeEngine()
+    override fun describe(image: ByteArray, question: String, system: String?): Flow<String> =
+        flow { throw UnsupportedOperationException("This model cannot see pictures.") }
+
+    /** Waits for the permit: closing while a reply is still running natively crashes. */
+    override suspend fun unloadWhenIdle() {
+        withTimeoutOrNull(WAIT_FOR_ENGINE_MS) { busy.withPermit { closeEngine() } }
     }
 
     private fun closeEngine() {
@@ -232,7 +242,7 @@ class MediaPipeLlm(context: Context) : LlmEngine {
      * budget. Anything longer is cut from the front, so a caller with a long
      * document sizes it with this first and keeps the part that matters.
      */
-    fun promptRoom(system: String?): Int {
+    override fun promptRoom(system: String?): Int {
         val budgetChars = ((maxTokens.takeIf { it > 0 } ?: TOKEN_BUDGETS.last()) - REPLY_RESERVE)
             .coerceAtLeast(128) * CHARS_PER_TOKEN
         return (budgetChars - (system?.trim()?.length ?: 0)).coerceAtLeast(400)

@@ -1,33 +1,52 @@
 package io.github.edzzztech.amy.core
 
 import kotlinx.coroutines.flow.Flow
+import java.io.File
 
 /**
- * What the rest of the app talks to, so the model backend can change without
- * touching anything else.
+ * One on-device model runtime. Two implement it: [LiteRtLlm] for `.litertlm`
+ * models (Gemma 3n, which can see) and [MediaPipeLlm] for `.task` models.
+ * [LocalModel] picks between them by the model file on the phone, so nothing
+ * else needs to know which is running.
  *
- * Implemented by [MediaPipeLlm]. A phone realistically runs a 1–3B parameter
- * model; the desktop's larger models stay on the desktop, and the phone can
- * hand work over when the two are on the same network.
+ * A phone realistically runs a 1–4B parameter model; the desktop's larger
+ * models stay on the desktop, and the phone can hand work over when the two
+ * are on the same network.
  */
 interface LlmEngine {
 
+    /** The model files this runtime loads, by extension. */
+    val fileExtension: String
+
     val isLoaded: Boolean
 
-    /** Load a model file from local storage. Returns false rather than throwing. */
-    suspend fun load(modelPath: String): Boolean
+    /** Whether the loaded model takes a picture as well as text. */
+    val supportsVision: Boolean
+
+    /** The largest model file of this runtime's kind in the model folder, if any. */
+    fun findModel(): File?
+
+    /** Load [findModel]'s file if nothing is loaded. False rather than throwing. */
+    suspend fun ensureLoaded(): Boolean
+
+    /** Characters of prompt that fit beside [system] in the loaded model's window. */
+    fun promptRoom(system: String?): Int
 
     /**
-     * Stream a reply token by token. The caller accumulates sentences and hands
-     * each completed one to [Tts], which is what lets her start talking before
-     * the model has finished.
+     * Stream a reply, piece by piece. The caller accumulates sentences and
+     * hands each completed one to [Tts], which is what lets her start talking
+     * before the model has finished.
      */
-    fun generate(prompt: String, system: String? = null, maxTokens: Int = 320): Flow<String>
+    fun generate(prompt: String, system: String? = null): Flow<String>
+
+    /** Stream an answer about a picture (encoded PNG or JPEG bytes). */
+    fun describe(image: ByteArray, question: String, system: String? = null): Flow<String>
 
     /** Stop generating now; used for barge-in. */
     fun cancel()
 
-    fun unload()
+    /** Free the model, once nothing is running on it. */
+    suspend fun unloadWhenIdle()
 }
 
 /**

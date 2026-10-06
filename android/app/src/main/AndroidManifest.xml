@@ -54,6 +54,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Amy">
 
+        <!-- The GPU route for on-device models. Android 12+ only lets an app
+             load these vendor libraries if it declares them; optional, so a
+             phone without them still installs and runs on the CPU. -->
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

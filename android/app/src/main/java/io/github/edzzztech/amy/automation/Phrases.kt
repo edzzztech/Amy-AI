@@ -34,6 +34,9 @@ object Phrases {
     fun asksAppCount(lower: String) = APP_COUNT.matches(lower)
     fun asksScreen(lower: String) = SCREEN.containsMatchIn(lower)
 
+    /** "What am I looking at?", "look at this": show her through the camera. */
+    fun asksToLook(lower: String) = LOOK.matches(lower)
+
     /** Hours of the action log to read back, or null if that is not the question. */
     fun actionLogHours(lower: String): Int? {
         val m = ACTION_LOG.matchEntire(lower) ?: return null
@@ -288,6 +291,10 @@ object Phrases {
     )
     private val SCREEN = Regex(
         "what(?:'s| is| can you see)? on (?:the |my )?screen|read (?:me )?(?:the |my )?screen"
+    )
+    private val LOOK = Regex(
+        "what am i looking at|(?:have|take) a look(?: at this)?|look at this|" +
+            "what (?:can|do) you see|can you see this"
     )
     private val ACTION_LOG = Regex(
         "(?:what (?:have you|did you) (?:done|do)|what have you been (?:doing|up to)|" +
