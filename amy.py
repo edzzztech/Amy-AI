@@ -1137,10 +1137,29 @@ def load_config():
     return cfg
 
 
+_CONFIG_LOCK = threading.Lock()
+
+
 def save_config(cfg):
+    """Write the config without ever leaving it half-written.
+
+    It used to open the file for writing (emptying it) and then encode into
+    it, so a value JSON cannot store, raising part-way, left a truncated
+    file - as could two threads saving at once - and the next start had no
+    settings. Now it is encoded first, written to a temporary file, and
+    swapped in whole.
+    """
     try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=4)
+        payload = json.dumps(cfg, indent=4)
+    except Exception as e:
+        log_debug(f"Config not saved - it holds something JSON cannot store: {e}")
+        return False
+    try:
+        with _CONFIG_LOCK:
+            tmp = CONFIG_FILE + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(payload)
+            os.replace(tmp, CONFIG_FILE)
         return True
     except Exception as e:
         log_debug(f"Failed to save config: {e}")
