@@ -10,7 +10,9 @@ That follows from the requirement "I want to access it anywhere, even if my PC i
 
 - **Always listening** for "Amy" (and the usual mis-hearings: Aimee, Amie, Emmy…). After each reply there is a 20-second window where follow-ups don't need her name. Say "go to sleep" or tap the mic to stop; she stays asleep, even across restarts, until woken.
 - **An on-device model**, GPU first with a CPU fallback: a `.litertlm` model runs on Google's LiteRT-LM, a `.task` model on MediaPipe. Her voice starts on the first sentence rather than waiting for the whole reply.
-- **She can see**, with a Gemma 3n model: take a photo in the camera view, or attach a picture, and she says what's in it. "What am I looking at?" opens the camera.
+- **She can see**, with a Gemma 3n model: take a photo in the camera view, or attach a picture. The picture appears in the conversation with her answer under it. "What am I looking at?" opens the camera.
+- **She can look things up.** "Google ...", "search for ...", "look up ..." always search the web; questions about news, prices, scores or the weather do so by themselves. The answer names the sites it came from. Search is DuckDuckGo with Wikipedia as a fallback, because Google's results cannot be read by an app without a paid key; the weather comes from wttr.in. Only the words searched for are sent.
+- **No listening chime.** Continuous listening restarts the recogniser every few seconds, and Google's beeps each time. On Android 12+ she uses the phone's on-device recogniser, which makes no sound. Elsewhere she mutes only the media stream, only while nothing is playing, and only for the moment the beep plays. Notification, ringtone and alarm sounds are never touched.
 - **Answers from the phone itself** for the time, the date and the battery — a small model would guess those.
 - **Phone controls**: open apps by name, set timers and alarms (through your clock app), switch the torch, change the media volume.
 - **Acting on the screen**, with her accessibility service on: read what is on screen, tap things by name, type into the focused field, go back, go home.
@@ -30,6 +32,8 @@ That follows from the requirement "I want to access it anywhere, even if my PC i
 | "Turn the torch on" / "Volume up" / "Set the volume to 40 percent" | Done directly |
 | "What's on my screen?" / "Tap Send" / "Type see you soon" | Through the accessibility service |
 | "What am I looking at?" | Opens the camera; take a photo and she describes it (needs Gemma 3n) |
+| "Google who won the match" / "Look up Marie Curie" | Searched on the web, answered with the sources named |
+| "What's the weather like in Paris?" | The weather now, from wttr.in |
 | "On my PC, open Chrome" | Sent to Amy on your computer |
 | "What have you done today?" | Read back from the action log |
 | "Go to sleep" | Stops listening until woken |
@@ -40,7 +44,7 @@ Polite forms work too: "could you open Spotify for me, please" is the same comma
 
 ## Which model
 
-Put one model file in the app's folder on the phone (the main README has the `adb push` line). She uses the largest file there of the kind she prefers.
+Download a model file on the phone, then tap **Attach** in Amy and pick it: she copies it into her folder and loads it, no computer needed. (Or push it with adb; the main README has the line.) She uses the largest file there of the kind she prefers.
 
 | Model | File | Size | Sees pictures |
 |---|---|---|---|
@@ -91,7 +95,8 @@ Optional. Everything above works unrooted. Today root is used for one thing: ope
 
 ## Known limits
 
-- **Seeing needs Gemma 3n.** With a text-only model the camera just saves photos. Describing one takes a few seconds, and the vision part needs the phone's GPU; without one she falls back to text only.
+- **Seeing needs Gemma 3n.** With a text-only model the photo still appears in the conversation, and she says she can't see it. Describing one takes a few seconds, and the vision part needs the phone's GPU; without one she falls back to text only.
+- **Web answers are only as good as the search snippets.** She reads the summaries on a results page, not whole articles, and a small model can still get a detail wrong. Check anything that matters at the sources she names.
 - **No voice interruptions while she talks.** Android's speech recogniser has no echo cancellation, so she would hear herself; she stops listening while speaking. Tap the mic, or long-press the orb, to cut her off.
 - **Speech recognition is your phone's own.** She asks it to work offline; whether it can depends on the phone and its installed language packs.
 

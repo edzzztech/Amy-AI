@@ -36,6 +36,7 @@ A second build that runs **on the phone**, not a remote control for the desktop 
 
 - Always listening for the wake word, with a conversation window for follow-ups
 - A local model on-device, GPU-accelerated, which with Gemma 3n can also see photos and pictures
+- Looks things up on the web when asked ("google ...", "look up ...") or when a question needs today's answer: news, prices, scores, the weather
 - Opens and drives Android apps through the accessibility service, with optional root
 - Timers, alarms, torch and volume; the time, date and battery answered from the phone
 - Reads attached text and Word documents, and sends commands to your PC once paired
@@ -51,13 +52,13 @@ There is no Play Store build; you build it yourself.
 2. Let Gradle sync — the first run downloads several GB
 3. Enable **Developer options** and **USB debugging** on your phone, plug it in, and press **Run**
 4. Download a model. For talking, [Gemma 3 1B](https://huggingface.co/litert-community/Gemma3-1B-IT) is about 0.6 GB. For her to see pictures too, [Gemma 3n E2B](https://huggingface.co/google/gemma-3n-E2B-it-litert-lm) is 3.7 GB (`gemma-3n-E2B-it-int4.litertlm`). Both are gated, so accept the Gemma licence on Hugging Face first; [android/README.md](android/README.md#which-model) has the details.
-5. Push it to the phone:
+5. Put it on the phone. The easiest way: download it on the phone itself (or copy it over USB), then in Amy tap **Attach** and pick the file. She copies it into place and loads it. Or, from a computer, push it with adb, which Android Studio installs but does not put on your PATH:
 
-```bash
-adb push gemma-3n-E2B-it-int4.litertlm /sdcard/Android/data/io.github.edzzztech.amy/files/
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" push gemma-3n-E2B-it-int4.litertlm /sdcard/Android/data/io.github.edzzztech.amy/files/
 ```
 
-A `.task` file goes in the same folder the same way. The filename does not matter.
+That line is for PowerShell on Windows; on macOS or Linux, `~/Library/Android/sdk/platform-tools/adb` or `~/Android/Sdk/platform-tools/adb`. A `.task` file goes in the same folder the same way. The filename does not matter.
 
 6. On the phone, grant **microphone** and **notifications**, turn on **Accessibility → Amy** for app control, and set the battery to **Unrestricted** so the listening service survives
 
