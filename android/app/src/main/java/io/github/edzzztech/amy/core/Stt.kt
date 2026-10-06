@@ -3,14 +3,24 @@ package io.github.edzzztech.amy.core
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import androidx.core.content.edit
 
 /**
  * Speech in, built for listening continuously rather than in bursts.
  *
+ *  - **No chime.** Listening continuously means restarting the recogniser every
+ *    few seconds, and Google's plays a cue each time it starts and stops: a
+ *    sound on a loop. Android 12+ has an on-device recogniser with no cue at
+ *    all, used wherever the phone has it. Elsewhere [CueGuard] mutes the
+ *    media stream for the moment the cue plays, and only when nothing is
+ *    playing. Notification, ringer and alarm sounds are never touched.
  *  - **One recogniser, reused.** Creating and destroying one per utterance makes
  *    most devices replay their start cue every cycle — a chime every second.
  *  - **It can be reset.** A reused recogniser occasionally wedges: it reports
@@ -34,31 +44,39 @@ class Stt(private val context: Context) {
     var preferOffline: Boolean = true
 
     /**
-     * Silence the device's listening cues while she is listening.
-     *
-     * Off by default, deliberately. Muting the system and notification streams
-     * silences everything else on the phone too, so an always-on assistant
-     * would keep your handset on silent all day. Reusing one recogniser already
-     * removes the repeated chime; this exists only for devices that still cue
-     * on every pass, and it is yours to switch on.
+     * Mute the listening cue on phones without the on-device recogniser. Only
+     * the media stream, only while nothing is playing, and only for the
+     * moment the cue plays; see [CueGuard].
      */
-    var suppressCues: Boolean = false
+    var suppressCues: Boolean = true
+
+    /**
+     * The on-device recogniser, which makes no sound, where the phone has
+     * one. Dropped for Google's usual recogniser if it turns out not to
+     * support the language or fails to start.
+     */
+    private var onDevice: Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }.getOrDefault(false)
+
+    private var askedForDownload = false
 
     private var recognizer: SpeechRecognizer? = null
-    private var mutedStreams = false
 
     /** True between startListening and the matching result or error. */
     var isListening: Boolean = false
         private set
 
-    private val audio: AudioManager? =
-        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    private val cues = CueGuard(context)
 
     val isAvailable: Boolean
-        get() = SpeechRecognizer.isRecognitionAvailable(context)
+        get() = onDevice || SpeechRecognizer.isRecognitionAvailable(context)
 
     private val listener = object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) { onReadyForSpeech?.invoke() }
+        override fun onReadyForSpeech(params: Bundle?) {
+            cues.restoreSoon()          // the start cue has played by now
+            onReadyForSpeech?.invoke()
+        }
         override fun onBeginningOfSpeech() {}
 
         override fun onRmsChanged(rmsdB: Float) {
@@ -71,6 +89,7 @@ class Stt(private val context: Context) {
 
         override fun onEndOfSpeech() {
             AmyState.setLevel(0f)
+            hush()                      // the stop cue plays as recognition ends
             onEndOfSpeech?.invoke()
         }
 
@@ -90,6 +109,22 @@ class Stt(private val context: Context) {
 
         override fun onError(error: Int) {
             finishPass()
+            if (onDevice && error in ON_DEVICE_GIVE_UP) {
+                // No on-device model for this language, or the service is
+                // missing: fall back to the usual recogniser. Ask the phone to
+                // fetch the language once, so a later start can be silent.
+                if (error == LANGUAGE_UNAVAILABLE && !askedForDownload &&
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                ) {
+                    askedForDownload = true
+                    runCatching { recognizer?.triggerModelDownload(intent()) }
+                }
+                // The listener resets the recogniser on ERROR_CLIENT, and the
+                // next one is built without onDevice.
+                onDevice = false
+                this@Stt.onError?.invoke(SpeechRecognizer.ERROR_CLIENT, "Switching recogniser")
+                return
+            }
             this@Stt.onError?.invoke(error, describe(error))
         }
 
@@ -99,14 +134,28 @@ class Stt(private val context: Context) {
     private fun finishPass() {
         isListening = false
         AmyState.setLevel(0f)
+        cues.restoreSoon()
     }
+
+    /** Mute the media stream for a cue, unless the recogniser makes none. */
+    private fun hush() {
+        if (suppressCues && !onDevice) cues.hush()
+    }
+
+    /** Sound back on now: she is about to talk. Safe from any thread. */
+    fun restoreCues() = cues.restore()
 
     /** Create the recogniser once; [listen] is then cheap to call repeatedly. */
     private fun ensureRecognizer(): SpeechRecognizer? {
         if (!isAvailable) return null
         recognizer?.let { return it }
         return try {
-            SpeechRecognizer.createSpeechRecognizer(context).also {
+            val created = if (onDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+            } else {
+                SpeechRecognizer.createSpeechRecognizer(context)
+            }
+            created.also {
                 it.setRecognitionListener(listener)
                 recognizer = it
             }
@@ -123,12 +172,13 @@ class Stt(private val context: Context) {
             onError?.invoke(SpeechRecognizer.ERROR_CLIENT, "No speech recogniser on this device")
             return
         }
-        if (suppressCues) muteCues()
+        hush()                          // the start cue plays as listening begins
         isListening = true
         try {
             r.startListening(intent())
         } catch (e: Exception) {
             isListening = false
+            cues.restore()
             onError?.invoke(SpeechRecognizer.ERROR_CLIENT, "Could not start listening")
         }
     }
@@ -142,7 +192,7 @@ class Stt(private val context: Context) {
         } catch (e: Exception) {
             // Cancelling an idle recogniser is not worth reporting.
         }
-        restoreCues()
+        cues.restore()
     }
 
     /**
@@ -166,7 +216,7 @@ class Stt(private val context: Context) {
             // Destroying an already-dead recogniser is not worth reporting.
         }
         recognizer = null
-        restoreCues()
+        cues.restore()
     }
 
     private fun intent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -174,37 +224,6 @@ class Stt(private val context: Context) {
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
         if (preferOffline) putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-    }
-
-    /**
-     * Silence the device's listening cues. Wrapped because the notification and
-     * system streams are protected by Do Not Disturb policy on some builds and
-     * throw rather than failing quietly.
-     */
-    private fun muteCues() {
-        if (mutedStreams) return
-        val am = audio ?: return
-        CUE_STREAMS.forEach { stream ->
-            try {
-                am.adjustStreamVolume(stream, AudioManager.ADJUST_MUTE, 0)
-            } catch (e: Exception) {
-                // Blocked by DND policy; the cue stays audible on this device.
-            }
-        }
-        mutedStreams = true
-    }
-
-    private fun restoreCues() {
-        if (!mutedStreams) return
-        val am = audio ?: return
-        CUE_STREAMS.forEach { stream ->
-            try {
-                am.adjustStreamVolume(stream, AudioManager.ADJUST_UNMUTE, 0)
-            } catch (e: Exception) {
-                // Nothing to restore if muting was refused in the first place.
-            }
-        }
-        mutedStreams = false
     }
 
     /**
@@ -235,7 +254,81 @@ class Stt(private val context: Context) {
     }
 
     private companion object {
-        /** The streams devices use for the listening chime. */
-        val CUE_STREAMS = listOf(AudioManager.STREAM_SYSTEM, AudioManager.STREAM_NOTIFICATION)
+        // SpeechRecognizer's codes for these, added in Android 12, written out
+        // so older phones are not asked for a constant they lack.
+        const val SERVER_DISCONNECTED = 11
+        const val LANGUAGE_NOT_SUPPORTED = 12
+        const val LANGUAGE_UNAVAILABLE = 13
+        const val CANNOT_CHECK_SUPPORT = 14
+        val ON_DEVICE_GIVE_UP = setOf(
+            SERVER_DISCONNECTED, LANGUAGE_NOT_SUPPORTED, LANGUAGE_UNAVAILABLE, CANNOT_CHECK_SUPPORT,
+            SpeechRecognizer.ERROR_CLIENT,
+        )
+    }
+}
+
+/**
+ * Keeps Google's listening cue quiet without silencing the phone.
+ *
+ * The cue plays on the media stream as listening starts and stops. This mutes
+ * that stream for just those moments, and only when nothing is playing - so
+ * music is never cut, and notifications, calls and alarms, which have streams
+ * of their own, are never affected. It never mutes for longer than
+ * [LONGEST_MS], and a mute left behind by the app being killed is undone the
+ * next time it starts. If you had muted media yourself, it is left alone.
+ */
+internal class CueGuard(context: Context) {
+
+    private val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    private val prefs = context.applicationContext.getSharedPreferences("cues", Context.MODE_PRIVATE)
+    private val main = Handler(Looper.getMainLooper())
+    private val restoreNow = Runnable { restore() }
+    private var muted = false
+
+    init {
+        // Killed while muted last time: put the sound back.
+        if (prefs.getBoolean(KEY, false)) {
+            runCatching { audio?.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0) }
+            prefs.edit { putBoolean(KEY, false) }
+        }
+    }
+
+    @Synchronized
+    fun hush() {
+        val am = audio ?: return
+        main.removeCallbacks(restoreNow)
+        main.postDelayed(restoreNow, LONGEST_MS)
+        if (muted) return
+        if (am.isMusicActive || am.isStreamMute(AudioManager.STREAM_MUSIC)) return
+        try {
+            am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+            muted = true
+            prefs.edit { putBoolean(KEY, true) }
+        } catch (e: Exception) {
+            // Refused on this device; the cue stays audible.
+        }
+    }
+
+    /** Unmute shortly: the cue is still finishing as the callback arrives. */
+    @Synchronized
+    fun restoreSoon() {
+        if (!muted) return
+        main.removeCallbacks(restoreNow)
+        main.postDelayed(restoreNow, AFTER_CUE_MS)
+    }
+
+    @Synchronized
+    fun restore() {
+        main.removeCallbacks(restoreNow)
+        if (!muted) return
+        muted = false
+        runCatching { audio?.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0) }
+        prefs.edit { putBoolean(KEY, false) }
+    }
+
+    private companion object {
+        const val KEY = "media_muted_for_cue"
+        const val AFTER_CUE_MS = 450L
+        const val LONGEST_MS = 3_000L
     }
 }

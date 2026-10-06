@@ -138,6 +138,9 @@ class WakeListener(
     /** She has started talking: stop hearing, so she cannot hear herself. */
     fun pauseForSpeech() {
         talking = true
+        // Now, not in the posted task: her voice is on the media stream, and
+        // a listening cue may have it muted for a moment.
+        stt.restoreCues()
         main.post {
             cancelListening()
             stt.pause()
