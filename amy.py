@@ -7328,6 +7328,20 @@ class AmyApp:
         found.sort(reverse=True)
         return [p for _, p in found[:limit]]
 
+    def _is_installed_app(self, name):
+        """True when `name` is an app on this machine or a known web app -
+        the bar for the looser verbs ("start X", "run X") to launch it."""
+        key = str(name).strip().lower()
+        if key in self.WEB_FALLBACKS or key in self.APP_MAP:
+            return True
+        try:
+            if not self.app_index.ready.is_set():
+                self.app_index.ready.wait(3)
+            entry, score = self.app_index.resolve(key, self.memory.get("app_aliases", {}))
+            return bool(entry) and score >= 0.72
+        except Exception:
+            return False
+
     def launch_external_app(self, target, args=None):
         """Open an app, file, folder or site by name.
 
@@ -7734,91 +7748,123 @@ class AmyApp:
                 log_debug(f"Spotify loop poll exception: {e}")
             time.sleep(4)
 
+    def _spotify_configured(self):
+        """Spotify API keys present, not the config's placeholders."""
+        cid = os.getenv("SPOTIPY_CLIENT_ID", SPOTIPY_CLIENT_ID) or ""
+        secret = os.getenv("SPOTIPY_CLIENT_SECRET", SPOTIPY_CLIENT_SECRET) or ""
+        return bool(SPOTIPY_AVAILABLE and cid and secret and "YOUR_SPOTIPY" not in cid)
+
+    def _media_key(self, action, said):
+        """Press a system media key. They work for whatever is playing - the
+        Spotify app, a browser tab, anything - with no account or API key.
+        Without this, "pause the music" only worked for someone who had
+        registered a Spotify developer app; everyone else heard "Spotify
+        isn't authenticated" and nothing happened."""
+        key = {"toggle": "playpause", "next": "nexttrack", "previous": "prevtrack"}[action]
+        try:
+            pyautogui.press(key)
+            self.speak(f"{said}, {USER_TITLE}.")
+        except Exception as e:
+            log_debug(f"media key {key} failed: {e}")
+            self.speak(f"I couldn't reach the media controls, {USER_TITLE}.")
+        return True
+
     def spotify_play_track(self, query):
+        if not self._spotify_configured():
+            # Picking a particular song needs the API; YouTube needs nothing.
+            self.speak(f"Spotify isn't set up, so here's {query} on YouTube, {USER_TITLE}.")
+            return self.web_search(query, engine="youtube")
         sp = self._spotify()
         if not sp:
             return True
 
         device_id = self.get_active_spotify_device(sp)
         if not device_id:
-            self.speak("Unable to detect active Spotify device.")
+            self.speak("Spotify isn't open on any device, Sir. Open it and ask again.")
             return True
 
         try:
             results = sp.search(q=query, limit=1, type="track")
             tracks = results.get("tracks", {}).get("items", [])
-            
+
             if tracks:
                 track = tracks[0]
                 sp.start_playback(device_id=device_id, uris=[track["uri"]])
-                self.speak(f"Playing {track['name']} by {track['artists'][0]['name']} via Spotify API.")
+                self.speak(f"Playing {track['name']} by {track['artists'][0]['name']}, Sir.")
             else:
-                self.speak(f"Could not find {query} on Spotify.")
+                self.speak(f"I couldn't find {query} on Spotify, Sir.")
         except spotipy.SpotifyException as e:
             log_debug(f"Spotify Playback API Exception: {e}")
             if "PREMIUM_REQUIRED" in str(e):
-                self.speak("Spotify API playback requires a Spotify Premium subscription, Sir.")
+                self.speak("Choosing a song through Spotify needs Spotify Premium, Sir.")
             else:
-                self.speak("Spotify Web API rejected playback command.")
+                self.speak("Spotify turned that request down, Sir.")
         except Exception as e:
             log_debug(f"Spotify play error: {e}")
-            self.speak("Failed to start Spotify playback.")
+            self.speak("I couldn't start Spotify playing, Sir.")
         return True
 
     def spotify_toggle_play(self, force_play=False):
+        if not self._spotify_configured():
+            return self._media_key("toggle", "Done")
         sp = self._spotify()
         if not sp:
-            return True
+            return self._media_key("toggle", "Done")
 
         device_id = self.get_active_spotify_device(sp)
         if not device_id:
-            self.speak("No active Spotify device found.")
-            return True
+            return self._media_key("toggle", "Done")
 
         try:
             current = sp.current_playback()
             if current and current.get("is_playing") and not force_play:
                 sp.pause_playback(device_id=device_id)
-                self.speak("Playback paused via Spotify API.")
+                self.speak("Paused, Sir.")
             else:
                 sp.start_playback(device_id=device_id)
-                self.speak("Resuming playback via Spotify API.")
+                self.speak("Playing, Sir.")
         except spotipy.SpotifyException as e:
             log_debug(f"Spotify toggle error: {e}")
-            self.speak("Spotify API playback toggle failed.")
+            return self._media_key("toggle", "Done")
         return True
 
     def spotify_pause(self):
+        if not self._spotify_configured():
+            return self._media_key("toggle", "Done")
         sp = self._spotify()
         if not sp:
-            return True
+            return self._media_key("toggle", "Done")
         try:
             sp.pause_playback()
-            self.speak("Playback paused via Spotify API.")
+            self.speak("Paused, Sir.")
         except spotipy.SpotifyException:
-            self.speak("Failed to pause via Spotify API.")
+            return self._media_key("toggle", "Done")
         return True
 
     def spotify_next(self):
+        if not self._spotify_configured():
+            return self._media_key("next", "Skipped")
         sp = self._spotify()
         if not sp:
-            return True
+            return self._media_key("next", "Skipped")
         try:
             sp.next_track()
-            self.speak("Track skipped via Spotify API.")
+            self.speak("Skipped, Sir.")
         except spotipy.SpotifyException:
-            self.speak("Failed to skip track via Spotify API.")
+            return self._media_key("next", "Skipped")
         return True
 
     def spotify_previous(self):
+        if not self._spotify_configured():
+            return self._media_key("previous", "Going back")
         sp = self._spotify()
         if not sp:
-            return True
+            return self._media_key("previous", "Going back")
         try:
             sp.previous_track()
-            self.speak("Playing previous track via Spotify API.")
+            self.speak("Going back, Sir.")
         except spotipy.SpotifyException:
-            self.speak("Failed to play previous track via Spotify API.")
+            return self._media_key("previous", "Going back")
         return True
 
     def spotify_announce_current(self):
@@ -9772,8 +9818,9 @@ class AmyApp:
     def report_system_status(self):
         try:
             cpu = psutil.cpu_percent(interval=0.5)
-            ram = psutil.virtual_memory().percent
-            parts = [f"CPU at {cpu} percent", f"memory at {ram} percent"]
+            vm = psutil.virtual_memory()
+            parts = [f"CPU at {cpu:.0f} percent",
+                     f"memory {vm.percent:.0f} percent used with {vm.available / 1e9:.1f} gigabytes free"]
             try:
                 batt = psutil.sensors_battery()
                 if batt is not None:
@@ -10617,19 +10664,89 @@ class AmyApp:
             self.speak("I could not read the process list, Sir.")
         return True
 
-    def kill_process(self, name):
-        killed = 0
-        for p in psutil.process_iter(['name']):
+    # Never closed by name, whatever is asked: Windows' own processes.
+    PROTECTED_PROCESSES = {"system", "idle", "registry", "smss", "csrss", "wininit", "winlogon",
+                           "services", "lsass", "svchost", "dwm", "explorer", "fontdrvhost",
+                           "sihost", "ctfmon", "memorycompression", "secure system"}
+
+    def kill_process(self, name, force=True, quiet_if_missing=False):
+        """Close the running app called `name` (chrome -> chrome.exe).
+
+        It used to end every process whose name merely *contained* the
+        words, so "close the app e" ended nearly everything, and "python"
+        ended Amy herself. Now the name must match the program exactly,
+        Windows' own processes and Amy are never touched, and unless
+        `force` the app is asked to quit, so it can offer to save, rather
+        than being terminated.
+        Returns False when nothing matched (and `quiet_if_missing`).
+        """
+        spoken = name.strip().lower()
+        spoken = re.sub(r"^(?:the|my)\s+", "", spoken)
+        spoken = re.sub(r"\s+(?:app|application|program|window)$", "", spoken)
+        wanted = {re.sub(r"[\s.]+exe$|\.exe$", "", spoken).replace(" ", "")}
+        mapped = self.APP_MAP.get(spoken)
+        if mapped and not mapped.endswith(":"):
+            wanted.add(mapped.lower())
+        wanted.discard("")
+        me = {os.getpid()}
+        try:
+            me.add(os.getppid())
+        except Exception:
+            pass
+        targets = []
+        for p in psutil.process_iter(["name", "pid"]):
             try:
-                if p.info['name'] and name.lower() in p.info['name'].lower():
-                    p.terminate()
-                    killed += 1
+                stem = re.sub(r"\.exe$", "", (p.info["name"] or "").lower()).replace(" ", "")
+                if stem in wanted and stem not in self.PROTECTED_PROCESSES and p.info["pid"] not in me:
+                    targets.append(p)
             except Exception:
                 continue
-        if killed:
-            self.speak(f"Terminated {killed} process{'es' if killed != 1 else ''} matching {name}, Sir.")
+        if not targets:
+            if quiet_if_missing:
+                return False
+            self.speak(f"I can't see {name} running, Sir.")
+            return True
+
+        shown = spoken.title()
+        if force:
+            for p in targets:
+                try:
+                    p.terminate()
+                except Exception:
+                    pass
+            self.actions.record("automation", f"Ended {shown}", detail=f"{len(targets)} processes")
+            self.speak(f"Ended {shown}, Sir.")
+            return True
+
+        # Ask it to close. On Windows taskkill without /F sends the window a
+        # close message, the same as clicking its X. Helper processes (a
+        # browser has dozens) ignore that and exit when their parent does,
+        # so success is judged by the top-level processes.
+        pids = {p.pid for p in targets}
+        mains = []
+        for p in targets:
+            try:
+                if p.ppid() not in pids:
+                    mains.append(p)
+            except Exception:
+                pass
+        for p in targets:
+            try:
+                if sys.platform == "win32":
+                    subprocess.run(["taskkill", "/PID", str(p.pid)], capture_output=True,
+                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), timeout=5)
+                else:
+                    p.terminate()
+            except Exception:
+                pass
+        psutil.wait_procs(mains or targets, timeout=6)
+        alive = [p for p in (mains or targets) if p.is_running()]
+        self.actions.record("automation", f"Closed {shown}",
+                            outcome="done" if not alive else "still open")
+        if alive:
+            self.speak(f"{shown} hasn't closed. It may be asking you something, Sir.")
         else:
-            self.speak(f"I found no running process called {name}, Sir.")
+            self.speak(f"Closed {shown}, Sir.")
         return True
 
     def network_info(self):
@@ -17959,8 +18076,12 @@ RULES
             return self.run_macro(macro_run.group(1).strip())
 
         # --- SCREEN AWARENESS ---
+        # "What can you see?" means the camera while it is on, else the screen.
+        if self.camera_active and re.fullmatch(_LEAD + r"what (?:can|do) you see(?: now)?" + _TAIL, cmd):
+            threading.Thread(target=self.lens_analyze, args=("identify",), daemon=True).start()
+            return True
         if any(k in cmd for k in ["what am i looking at", "what's on my screen", "what is on my screen",
-                                  "what do you see", "describe my screen"]):
+                                  "what do you see", "what can you see", "describe my screen"]):
             return self.describe_screen_now()
         if any(k in cmd for k in ["watch my screen", "start watching", "enable screen awareness",
                                   "keep an eye on my screen", "always watch"]):
@@ -17984,9 +18105,10 @@ RULES
             return self.find_files(ff.group(1).strip())
         if any(k in cmd for k in ["what's running", "what is running", "top processes", "list processes", "show processes"]):
             return self.list_processes()
-        kp = re.search(r'(?:kill|close|terminate|end)\s+(?:the\s+)?(?:process|task|app|program)\s+(.+)', cmd)
+        kp = re.search(r'(kill|close|terminate|end)\s+(?:the\s+)?(?:process|task|app|program)\s+(.+)', cmd)
         if kp:
-            return self.kill_process(kp.group(1).strip())
+            # "Close" asks the app to quit; the others force it.
+            return self.kill_process(kp.group(2).strip(), force=kp.group(1) != "close")
         if any(k in cmd for k in ["network info", "my ip", "what's my ip", "ip address", "network status"]):
             return self.network_info()
         if any(k in cmd for k in ["disk space", "disk usage", "how much storage", "storage space", "free space"]):
@@ -18117,6 +18239,36 @@ RULES
         if re.fullmatch(_LEAD + r"(?:start listening|wake up|unmute(?: yourself)?|"
                         r"(?:unmute|turn on|switch on) (?:the |your )?(?:mic|microphone))" + _TAIL, cmd):
             return self.voice_mute(False)
+
+        # --- TO-DO LIST, ALARMS, CAD EXPORT, HER WINDOW ---
+        # These existed on screen but not by voice, so asking went to the
+        # model - which would happily claim to have done them.
+        todo_word = r"(?:to ?-?do|task)"
+        todo = re.fullmatch(_LEAD + r"(?:add (.+?) to (?:my |the )?" + todo_word + r"(?:s| list)?|"
+                            r"add (?:a |an )?(?:new )?" + todo_word + r"[:,]?\s+(.+))" + _TAIL, cmd)
+        if todo:
+            task = (todo.group(1) or todo.group(2)).strip()
+            self.add_todo(task)
+            self.speak(f"Added {task} to your to-do list, {USER_TITLE}.")
+            return True
+        if re.fullmatch(_LEAD + r"(?:what(?:'s| is) on |read |show |list )?(?:me )?(?:my |the )?"
+                        + todo_word + r"(?:s| list)" + _TAIL, cmd):
+            return self.read_todos()
+        alarm = re.fullmatch(_LEAD + r"(?:set (?:an |a |my )?alarm(?: for| at)?|wake me(?: up)?(?: at)?)\s+"
+                             r"(\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)"
+                             r"(?:\s+(today|tonight|tomorrow))?" + _TAIL, cmd)
+        if alarm:
+            return self.remind_at("your alarm", alarm.group(1), alarm.group(2))
+        if re.fullmatch(_LEAD + r"(?:export|save)(?: the| an| a)? stl(?: file)?" + _TAIL, cmd):
+            self.cad_export_stl()          # returns the path, or None - it speaks either way
+            return True
+        if re.fullmatch(_LEAD + r"minimi[sz]e(?: yourself| the window| your window| amy)?" + _TAIL, cmd):
+            self.window_minimize()
+            return True
+        if re.fullmatch(_LEAD + r"(?:go |make (?:it |yourself )?)?(?:full ?screen|maximi[sz]e(?: yourself| the window"
+                        r"| your window)?)" + _TAIL, cmd):
+            self.window_toggle_fullscreen()
+            return True
 
         # --- VR (switched off in this build) ---
         # Phone phrases used to be caught here too, which answered "pair my
@@ -18782,7 +18934,9 @@ RULES
 
         # --- System status / battery ---
         if any(kw in cmd for kw in ["system status", "system info", "cpu usage", "battery level",
-                                    "battery status", "how much battery", "system telemetry"]):
+                                    "battery status", "how much battery", "system telemetry",
+                                    "how much ram", "ram usage", "memory usage", "how much memory",
+                                    "free memory", "ram is free", "ram free"]):
             return self.report_system_status()
 
         # --- Lock PC ---
@@ -18904,42 +19058,56 @@ RULES
             self.speak("System audio toggled, Sir.")
             return True
 
-        if "play " in cmd and ("on spotify" in cmd or "song" in cmd or "track" in cmd or cmd.startswith("play ")):
-            song_query = cmd_text
-            for prefix in ["play on spotify", "play song", "play track", "play"]:
-                if song_query.lower().startswith(prefix):
-                    song_query = song_query[len(prefix):].strip()
-                    break
-            song_query = song_query.replace("on spotify", "").strip()
-
-            if song_query and song_query.lower() not in ["music", "spotify", "pause"]:
-                return self.spotify_play_track(song_query)
-            elif song_query.lower() in ["music", "spotify"] or cmd.strip() == "play":
-                return self.spotify_toggle_play(force_play=True)
-
-        if any(kw in cmd for kw in ["pause spotify", "pause music", "stop music", "pause song"]):
+        # --- Music: whole requests, so "how do I play this track?" stays a
+        # question, and "pause the music" / "skip this track" are understood
+        # (only the exact phrases "pause music" and "skip track" were).
+        media = r"(?:the |my |this )?(?:music|song|track|spotify|playback|media)"
+        if re.fullmatch(_LEAD + r"(?:(?:pause|stop)\s+" + media + r"|pause)" + _TAIL, cmd):
             return self.spotify_pause()
-
-        if any(kw in cmd for kw in ["resume spotify", "resume music", "unpause music"]):
+        # Bare "continue" and "next" are left alone: said mid-conversation or
+        # mid-recipe they rarely mean the music.
+        if re.fullmatch(_LEAD + r"(?:(?:resume|unpause)(?:\s+" + media + r")?|continue\s+" + media + r"|"
+                        r"play(?:\s+(?:some |the |my )?(?:music|spotify|something))?)" + _TAIL, cmd):
             return self.spotify_toggle_play(force_play=True)
-
-        if any(kw in cmd for kw in ["next song", "skip song", "next track", "skip track"]):
+        if re.fullmatch(_LEAD + r"(?:next\s+(?:song|track|one)|skip(?:\s+(?:this |the )?(?:song|track|one))?|"
+                        r"skip (?:this|it)|play the next (?:song|track))" + _TAIL, cmd):
             return self.spotify_next()
-
-        if any(kw in cmd for kw in ["previous song", "last song", "previous track"]):
+        if re.fullmatch(_LEAD + r"(?:(?:previous|last)\s+(?:song|track)|play the (?:previous|last) (?:song|track)|"
+                        r"go back a (?:song|track))" + _TAIL, cmd):
             return self.spotify_previous()
+        if re.fullmatch(_LEAD + r"mute" + _TAIL, cmd):
+            pyautogui.press("volumemute")
+            self.speak("Sound toggled, Sir.")
+            return True
+        play = re.fullmatch(_LEAD + r"play\s+(?:the\s+)?(?:song\s+|track\s+)?(.+?)(?:\s+on spotify)?" + _TAIL, cmd)
+        if play and play.group(1).strip():
+            return self.spotify_play_track(play.group(1).strip())
 
         if "what is playing" in cmd or "what's playing" in cmd or "current song" in cmd:
             return self.spotify_announce_current()
 
-        open_match = re.search(r'\b(open|launch|start|focus|run)\s+(.+)', cmd)
+        # "Close Chrome": only when a program by that name is running, so
+        # "close the door" still reaches the model. Asks it to quit politely.
+        close_app = re.fullmatch(_LEAD + r"(?:close|quit|exit)\s+(?:the\s+|my\s+)?(.+?)"
+                                 r"(?:\s+(?:app|application|program))?" + _TAIL, cmd)
+        if close_app and self.kill_process(close_app.group(1), force=False, quiet_if_missing=True):
+            return True
+
+        # Launching must be the request itself. Matched anywhere, "what time
+        # does the match start tomorrow" launched an app called "tomorrow" -
+        # and an app that cannot be found is handed to the screen agent, which
+        # then clicks through the taskbar looking for it. "Start", "run" and
+        # "focus" are said about plenty else, so they only launch real apps.
+        open_match = re.match(_LEAD + r"(?:i(?:'d like| would like| want| need) (?:you )?to )?"
+                              r"(open|launch|start|focus|run|load)\s+(.+)", cmd)
         if open_match and not any(k in cmd for k in ["pdf", "email", "card", "macro", "automation"]):
+            verb = open_match.group(1)
             target_app = open_match.group(2).strip()
             # Strip filler so "open up the notepad app" -> "notepad"
             target_app = re.sub(r'^(up|the|my|a|an)\s+', '', target_app).strip()
             target_app = re.sub(r'\s+(app|application|program|please|for me)$', '', target_app).strip()
             target_app = target_app.strip('.,!?')
-            if target_app:
+            if target_app and (verb in ("open", "launch") or self._is_installed_app(target_app)):
                 self.speak(f"Launching {target_app}, Sir.")
                 return self.launch_external_app(target_app)
 
@@ -19118,6 +19286,10 @@ RULES
         if note:
             system += f"\n\nAdditional style instruction from the user: {note}"
         system += self._project_context()
+        # A model has no clock: without this, "how long until Christmas?" or
+        # "what day is it on Friday week?" is a confident guess.
+        now = datetime.datetime.now()
+        system += f"\n\nIt is now {now:%A} {now.day} {now:%B %Y}, {now:%H:%M}."
         chat_history = self.memory.get("chat_history", [])
         recent = chat_history[-16:]
         return [{"role": "system", "content": system}] + recent
@@ -19388,9 +19560,19 @@ RULES
         self.save_memory()
 
     def add_todo(self, task):
-        self.memory["todos"].append(task)
+        self.memory.setdefault("todos", []).append(task)
         self.save_memory()
         self.sync_todos_to_ui()
+
+    def read_todos(self):
+        todos = [str(t) for t in self.memory.get("todos", []) if str(t).strip()]
+        if not todos:
+            self.speak(f"Your to-do list is empty, {USER_TITLE}.")
+            return True
+        shown = "; ".join(todos[:8])
+        more = f", and {len(todos) - 8} more on screen" if len(todos) > 8 else ""
+        self.speak(f"You have {len(todos)} thing{'s' if len(todos) != 1 else ''} to do: {shown}{more}.")
+        return True
 
     def remove_todo(self, index):
         if 0 <= index < len(self.memory.get("todos", [])):
