@@ -13374,8 +13374,15 @@ Available intents:
 - "recall": answer from what the assistant already knows or has researched.
 - "chat": conversation, opinions, explanations, quick factual answers.
 
+A question about HOW to do something ("how do I rename files?") is "chat": choose
+an action intent only when the user wants it done now. When unsure, choose "chat".
+
 Return: {"intent":"<one of the above>","task":"<the request, rephrased clearly>","confidence":0.0-1.0}
 """
+
+    # Intents that act on the computer or reach other people need more
+    # certainty than ones that only produce something to read.
+    ACTING_INTENTS = {"ui_automation", "file_ops", "email", "message"}
 
     def classify_intent(self, cmd):
         """Ask the model what the user actually wants. Returns (intent, task)."""
@@ -13399,10 +13406,9 @@ Return: {"intent":"<one of the above>","task":"<the request, rephrased clearly>"
             log_debug(f"classify_intent error: {e}")
             return "chat", cmd, 0.0
 
-    # Quick signals that a request is obviously about driving the UI, so we can
-    # skip the classifier round-trip and stay fast.
-    # "...then click / press / type / scroll..." - a second on-screen step
-    # chained onto the first, which casual speech almost never contains.
+    # A request that is plainly on-screen work skips the classifier round
+    # trip: "...then click / press / type / scroll...", a second on-screen
+    # step chained onto the first, which casual speech almost never contains.
     UI_CHAIN = re.compile(
         r'\b(?:then|and then|after that)\s*,?\s+(?:click|double[- ]click|right[- ]click|press|type|'
         r'scroll|search for|log ?in(?:to)?|sign ?in(?:to)?|fill in|select|tap)\b', re.I)
@@ -13421,7 +13427,9 @@ Return: {"intent":"<one of the above>","task":"<the request, rephrased clearly>"
             return True
 
         intent, task, conf = self.classify_intent(cmd)
-        if conf < 0.4:
+        # A reply missing its confidence counts as 0.5: enough to research or
+        # draft, not enough to drive the screen or send anything.
+        if conf < (0.75 if intent in self.ACTING_INTENTS else 0.4):
             return False
 
         if intent == "ui_automation":
