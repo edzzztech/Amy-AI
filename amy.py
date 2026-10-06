@@ -877,7 +877,9 @@ DEFAULT_CONFIG = {
         "default_receiver": "YOUR_RECEIVER_EMAIL@gmail.com",
         # "browser" = open Gmail in Chrome and send visibly; "smtp" = silent background send.
         "mode": "browser",
-        "auto_send": True,
+        # Off: an email the model has written is shown for you to check (and
+        # in SMTP mode, confirmed by voice) before it goes anywhere.
+        "auto_send": False,
     },
     "spotify": {
         "client_id": "",
@@ -9019,6 +9021,13 @@ class AmyApp:
         self.safe_log(f"Email drafted to {to_addr} | Subject: {subject}")
 
         if EMAIL_MODE == "smtp":
+            if not auto_send:
+                # SMTP used to send at once whatever the setting said, so an
+                # email the model had just written went out unread.
+                return self.confirm_then(
+                    "Send email", f"To {to_addr}: {subject}",
+                    lambda: self.send_email_smtp(to_addr, subject, body),
+                    question=f"The email to {to_addr} is on screen, {USER_TITLE}. Shall I send it?")
             return self.send_email_smtp(to_addr, subject, body)
         return self.send_email_browser(to_addr, subject, body, auto_send=auto_send)
 
@@ -13392,17 +13401,22 @@ Return: {"intent":"<one of the above>","task":"<the request, rephrased clearly>"
 
     # Quick signals that a request is obviously about driving the UI, so we can
     # skip the classifier round-trip and stay fast.
-    UI_HINTS = re.compile(
-        r'\b(click|scroll|navigate|go to|press|select|tab|menu|button|sidebar|side menu|'
-        r'subscribe|like it|log ?in|sign ?in|search for .+ on|fill|submit|checkout|'
-        r'then\s+(?:click|go|open|press|select|type))\b', re.I)
+    # "...then click / press / type / scroll..." - a second on-screen step
+    # chained onto the first, which casual speech almost never contains.
+    UI_CHAIN = re.compile(
+        r'\b(?:then|and then|after that)\s*,?\s+(?:click|double[- ]click|right[- ]click|press|type|'
+        r'scroll|search for|log ?in(?:to)?|sign ?in(?:to)?|fill in|select|tap)\b', re.I)
 
     def smart_route(self, cmd):
         """Understand a free-form request and carry it out.
         Returns True if handled, False to fall through to normal chat."""
-        # Fast path: obvious multi-step UI work goes straight to automation.
-        multi_step = (" then " in cmd.lower() or cmd.lower().count(" and ") >= 1)
-        if self.UI_HINTS.search(cmd) and (multi_step or len(cmd.split()) > 5):
+        # Fast path only for an explicit chain of on-screen actions ("open
+        # YouTube, then search for cats"). It used to fire on one common word
+        # - "menu", "go to", "select", "fill", "like it" - in any sentence of
+        # more than five words, so "what's on the menu tonight?" or "I want to
+        # go to the gym later" set Amy driving the mouse and keyboard.
+        # Anything less clear-cut is left to the classifier below.
+        if self.UI_CHAIN.search(cmd):
             self.ai_automate(cmd)
             return True
 

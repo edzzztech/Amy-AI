@@ -6,7 +6,7 @@
         "app_password": "YOUR_APP_PASSWORD_HERE",
         "default_receiver": "YOUR_RECEIVER_EMAIL@gmail.com",
         "mode": "browser",
-        "auto_send": true
+        "auto_send": false
     },
     "spotify": {
         "client_id": "",
