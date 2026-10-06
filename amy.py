@@ -3293,6 +3293,16 @@ curves (frames, handles, grips). 1 to 8 parts, up to ~14 features per part."""
 # ==========================================================================
 
 
+# What may surround a command without changing it, for patterns anchored to
+# the whole request: her name (when the wake word was not stripped), a polite
+# opening, a polite close, and the punctuation Whisper adds. Unanchored
+# substring matching is how "remind me to call mum" placed a phone call and
+# "what caused the government shutdown" closed the app.
+_LEAD = (r"[\s,.!]*(?:(?:hey |ok |okay )?amy[,.!]?\s+)?"
+         r"(?:(?:can|could|would|will) you (?:please )?(?:tell me )?|please |just )*")
+_TAIL = r"(?:,?\s*(?:please|now|right now|for me|thanks|thank you))*[\s?.!]*"
+
+
 def _parse_clock(raw):
     """'8', '8:30', '8 pm', '7:45am' -> 'HH:MM' on a 24 hour clock."""
     t = str(raw).strip().lower().replace(".", ":")
@@ -8247,6 +8257,20 @@ class AmyApp:
         self.mic_muted = bool(muted)
         self.overlay_state("muted" if self.mic_muted else "idle")
 
+    def voice_mute(self, muted, announce=True):
+        """Mute or unmute from a command or the hotkey, keeping the on-screen
+        mic button in step - it holds its own state and would disagree."""
+        if announce and muted:
+            key = CONFIG.get("assistant", {}).get("push_to_talk", "")
+            how = "press the microphone button" + (f" or {key}" if key else "")
+            self.speak(f"I'll stop listening, {USER_TITLE}. To wake me, {how}.")
+        self.set_mic_mute(muted)
+        want = "true" if muted else "false"
+        self.run_js(f"if (typeof isMuted !== 'undefined' && isMuted !== {want}) toggleMute();")
+        if announce and not muted:
+            self.speak(f"Listening, {USER_TITLE}.")
+        return True
+
     def set_ui_ready(self):
         self.ui_ready = True
         def post_ready():
@@ -8273,6 +8297,10 @@ class AmyApp:
             self.sfx.play("startup")
             if CONFIG.get("assistant", {}).get("speak_greeting", True):
                 self.speak(f"Amy online and at your service, {USER_TITLE}.")
+            try:
+                self._rearm_reminders()
+            except Exception as e:
+                log_debug(f"reminder re-arm failed: {e}")
             saved_theme = CONFIG.get("ui", {}).get("theme", "arc")
             if saved_theme in self.THEMES:
                 self.run_js(f"applyTheme({json.dumps(self.THEMES[saved_theme])})")
@@ -9578,32 +9606,153 @@ class AmyApp:
             return True
 
     # --- NEW FEATURE: TIME & DATE ---
+    @staticmethod
+    def _spoken_clock(when):
+        """3:05 PM, not 03:05 PM, which some voices read as 'oh three'."""
+        return when.strftime("%I:%M %p").lstrip("0")
+
     def tell_time(self):
         now = datetime.datetime.now()
-        self.speak(f"It is {now.strftime('%I:%M %p')}, Sir.")
+        self.speak(f"It is {self._spoken_clock(now)}, Sir.")
         return True
 
     def tell_date(self):
         now = datetime.datetime.now()
-        self.speak(f"Today is {now.strftime('%A, %B %d, %Y')}, Sir.")
+        # "October 5", not "October 05".
+        self.speak(f"Today is {now:%A}, {now:%B} {now.day}, {now.year}, Sir.")
+        return True
+
+    # Places people ask the time in, and their time zones.
+    WORLD_ZONES = {
+        "london": "Europe/London", "uk": "Europe/London", "britain": "Europe/London",
+        "england": "Europe/London", "scotland": "Europe/London", "wales": "Europe/London",
+        "dublin": "Europe/Dublin", "ireland": "Europe/Dublin", "paris": "Europe/Paris",
+        "france": "Europe/Paris", "berlin": "Europe/Berlin", "germany": "Europe/Berlin",
+        "madrid": "Europe/Madrid", "spain": "Europe/Madrid", "rome": "Europe/Rome",
+        "italy": "Europe/Rome", "amsterdam": "Europe/Amsterdam", "brussels": "Europe/Brussels",
+        "lisbon": "Europe/Lisbon", "portugal": "Europe/Lisbon", "athens": "Europe/Athens",
+        "greece": "Europe/Athens", "istanbul": "Europe/Istanbul", "turkey": "Europe/Istanbul",
+        "moscow": "Europe/Moscow", "stockholm": "Europe/Stockholm", "oslo": "Europe/Oslo",
+        "copenhagen": "Europe/Copenhagen", "helsinki": "Europe/Helsinki", "warsaw": "Europe/Warsaw",
+        "zurich": "Europe/Zurich", "vienna": "Europe/Vienna", "prague": "Europe/Prague",
+        "new york": "America/New_York", "nyc": "America/New_York", "boston": "America/New_York",
+        "washington": "America/New_York", "miami": "America/New_York", "toronto": "America/Toronto",
+        "chicago": "America/Chicago", "houston": "America/Chicago", "dallas": "America/Chicago",
+        "denver": "America/Denver", "los angeles": "America/Los_Angeles", "la": "America/Los_Angeles",
+        "california": "America/Los_Angeles", "san francisco": "America/Los_Angeles",
+        "seattle": "America/Los_Angeles", "vancouver": "America/Vancouver",
+        "mexico city": "America/Mexico_City", "sao paulo": "America/Sao_Paulo",
+        "buenos aires": "America/Argentina/Buenos_Aires", "tokyo": "Asia/Tokyo", "japan": "Asia/Tokyo",
+        "seoul": "Asia/Seoul", "korea": "Asia/Seoul", "beijing": "Asia/Shanghai",
+        "shanghai": "Asia/Shanghai", "china": "Asia/Shanghai", "hong kong": "Asia/Hong_Kong",
+        "singapore": "Asia/Singapore", "bangkok": "Asia/Bangkok", "delhi": "Asia/Kolkata",
+        "new delhi": "Asia/Kolkata", "mumbai": "Asia/Kolkata", "india": "Asia/Kolkata",
+        "dubai": "Asia/Dubai", "karachi": "Asia/Karachi", "jakarta": "Asia/Jakarta",
+        "manila": "Asia/Manila", "sydney": "Australia/Sydney", "melbourne": "Australia/Melbourne",
+        "brisbane": "Australia/Brisbane", "perth": "Australia/Perth", "auckland": "Pacific/Auckland",
+        "new zealand": "Pacific/Auckland", "cairo": "Africa/Cairo", "egypt": "Africa/Cairo",
+        "johannesburg": "Africa/Johannesburg", "cape town": "Africa/Johannesburg",
+        "lagos": "Africa/Lagos", "nairobi": "Africa/Nairobi", "hawaii": "Pacific/Honolulu",
+    }
+
+    def world_time(self, place):
+        """The time somewhere else. False when the place is unknown or this
+        Python has no time zone data (Windows needs: pip install tzdata), so
+        the question goes on to the web or the model instead."""
+        name = place.strip(" ?.!,").lower()
+        zone = self.WORLD_ZONES.get(name)
+        if not zone:
+            return False
+        try:
+            from zoneinfo import ZoneInfo
+            there = datetime.datetime.now(ZoneInfo(zone))
+        except Exception:
+            return False
+        shown = name.upper() if len(name) <= 3 else name.title()
+        day = ""
+        if there.date() != datetime.datetime.now().date():
+            day = " tomorrow" if there.date() > datetime.datetime.now().date() else " yesterday"
+        self.speak(f"It's {self._spoken_clock(there)}{day} in {shown}, Sir.")
         return True
 
     # --- NEW FEATURE: REMINDERS ---
-    def add_reminder(self, text, delay_seconds):
-        due = time.time() + delay_seconds
-        self.memory.setdefault("reminders", []).append({"text": text, "due": due})
+    def add_reminder(self, text, delay_seconds, said=None):
+        """Remind in `delay_seconds`. `said` describes when, for the reply."""
+        entry = {"text": text, "due": time.time() + delay_seconds}
+        self.memory.setdefault("reminders", []).append(entry)
         self.save_memory()
-
-        def fire():
-            time.sleep(delay_seconds)
-            self.speak(f"Reminder, Sir: {text}")
-            self.safe_log(f"REMINDER FIRED: {text}")
-            self.instantiate_card("Reminder", "email_draft", text)
-
-        threading.Thread(target=fire, daemon=True).start()
-        mins = max(1, int(delay_seconds // 60))
-        self.speak(f"Reminder set for {mins} minute{'s' if mins != 1 else ''} from now, Sir.")
+        self._arm_reminder(entry)
+        if said is None:
+            mins = max(1, int(delay_seconds // 60))
+            said = f"{mins} minute{'s' if mins != 1 else ''} from now"
+        self.speak(f"Reminder set for {said}, Sir.")
         return True
+
+    def _arm_reminder(self, entry):
+        """Fire a saved reminder when it falls due, then drop it from memory."""
+        def fire():
+            time.sleep(max(0.0, entry["due"] - time.time()))
+            if entry not in self.memory.get("reminders", []):
+                return                      # cleared in the meantime
+            self.speak(f"Reminder, Sir: {entry['text']}")
+            self.safe_log(f"REMINDER FIRED: {entry['text']}")
+            self.instantiate_card("Reminder", "email_draft", entry["text"])
+            try:
+                self.memory["reminders"].remove(entry)
+            except ValueError:
+                pass
+            self.save_memory()
+        threading.Thread(target=fire, daemon=True, name="reminder").start()
+
+    def _rearm_reminders(self):
+        """Reminders were saved but never re-armed, so closing Amy silently
+        lost every one still to come. Re-arm those, mention any that fell due
+        in the last twelve hours while she was closed, and drop the rest."""
+        now = time.time()
+        upcoming, missed = [], []
+        for r in list(self.memory.get("reminders", [])):
+            due = r.get("due") if isinstance(r, dict) else None
+            if not isinstance(due, (int, float)) or not r.get("text"):
+                continue
+            if due > now:
+                upcoming.append(r)
+            elif now - due < 12 * 3600:
+                missed.append(r)
+        self.memory["reminders"] = upcoming
+        self.save_memory()
+        for r in upcoming:
+            self._arm_reminder(r)
+        if missed:
+            what = "; ".join(r["text"] for r in missed)
+            self.speak(f"While I was closed, {len(missed)} reminder"
+                       f"{' was' if len(missed) == 1 else 's were'} due: {what}.")
+
+    def remind_at(self, text, raw_time, day=None):
+        """'remind me to X at 6', 'at 6:30pm tomorrow'. Without am or pm the
+        next one is meant: 6 said in the afternoon is 6 pm."""
+        raw = str(raw_time).lower().replace("a.m.", "am").replace("p.m.", "pm")
+        hh, mm = (int(x) for x in _parse_clock(raw).split(":"))
+        now = datetime.datetime.now()
+        explicit = "am" in raw or "pm" in raw
+        day = (day or "").strip()
+        if day == "tonight" and hh < 12:
+            hh += 12
+            explicit = True
+        base = now.date() + datetime.timedelta(days=1 if day == "tomorrow" else 0)
+        first = datetime.datetime.combine(base, datetime.time(hh, mm))
+        candidates = [first]
+        if not explicit and 1 <= hh <= 11:
+            candidates.append(first + datetime.timedelta(hours=12))
+        if day != "tomorrow":
+            candidates += [c + datetime.timedelta(days=1) for c in candidates]
+        upcoming = [c for c in candidates if c > now]
+        target = min(upcoming) if upcoming else first + datetime.timedelta(days=1)
+        when = self._spoken_clock(target)
+        if target.date() == now.date() + datetime.timedelta(days=1):
+            when = f"tomorrow at {when}"
+        elif target.date() != now.date():
+            when = f"{target:%A} at {when}"
+        return self.add_reminder(text, (target - now).total_seconds(), said=when)
 
     # --- NEW FEATURE: SCREENSHOT TO DESKTOP ---
     def take_screenshot(self):
@@ -10142,6 +10291,41 @@ class AmyApp:
         except Exception as e:
             log_debug(f"explain_code error: {e}")
             self.speak("I could not analyse that code, Sir.")
+        return True
+
+    def review_code(self, code=None):
+        """Look for bugs in the current code (or copied code) and report them,
+        without changing anything - fix_code is the one that edits."""
+        target = code or ((self.current_code or {}).get("code")
+                          if getattr(self, "current_code", None) else None)
+        if not target and HAS_CLIPBOARD:
+            try:
+                target = pyperclip.paste()
+            except Exception:
+                target = None
+        if not target or not str(target).strip():
+            self.speak("I have no code to check, Sir. Open a file or copy some code first.")
+            return True
+        self.speak("Checking the code for bugs, Sir.")
+        try:
+            res = self.http.post(OLLAMA_URL, json={
+                "model": self._code_model(),
+                "messages": [{"role": "user", "content":
+                              "Review this code for bugs. For each real problem give the line, "
+                              "what goes wrong, and a one-line fix. Do not invent problems: if "
+                              "you find none, say so plainly.\n\n" + str(target)[:8000]}],
+                "stream": False, "keep_alive": "30m",
+                "options": {"num_predict": 700, "temperature": 0.2, "num_ctx": 8192},
+            }, timeout=180)
+            report = self._llm_text(res)
+            if report:
+                self.instantiate_card("Code Review", "code_bug", report)
+                self.speak("Here is what I found, Sir.")
+            else:
+                self.speak("I couldn't get a review back, Sir.")
+        except Exception as e:
+            log_debug(f"review_code error: {e}")
+            self.speak("I could not review that code, Sir.")
         return True
 
     def update_code_from_ui(self, code):
@@ -14681,6 +14865,10 @@ difference() { plate_body(); holes(); }''',
             if self.is_speaking:
                 self.stop_speech()
                 return
+            if self.mic_muted:
+                # Pressed to talk, so she must be able to hear. While muted
+                # she answered "Yes?" and then ignored what you said.
+                self.voice_mute(False, announce=False)
             self.actions.record("system", "Push-to-talk pressed")
             # Mirror the wake-word branch exactly, so the follow-up window,
             # sounds and UI all behave identically.
@@ -14964,8 +15152,13 @@ difference() { plate_body(); holes(); }''',
             return True
         return len(steps) > 8
 
-    def request_approval(self, name, steps, request):
-        """Show the plan and wait for a yes/no. Returns True to proceed."""
+    def request_approval(self, name, steps, request, question=None):
+        """Show the plan and wait for a yes/no. Returns True to proceed.
+
+        Blocks the calling thread, so never call it on the command worker:
+        the answer arrives as the next command, which would sit behind it.
+        confirm_then does it on a thread of its own.
+        """
         preview = "\n".join(
             f"{i}. {s.get('action', '')} {str(s.get('value', ''))[:60]}"
             for i, s in enumerate(steps, 1))
@@ -14973,8 +15166,8 @@ difference() { plate_body(); holes(); }''',
         self.awaiting_approval = True
         self.run_js(f"showApproval({json.dumps(name)}, {json.dumps(preview)})")
         self.instantiate_card(f"Approve: {name}", "code_bug", preview)
-        self.speak(f"I've planned {len(steps)} steps for that, {USER_TITLE}. "
-                   "Shall I go ahead?")
+        self.speak(question or f"I've planned {len(steps)} step{'s' if len(steps) != 1 else ''} "
+                               f"for that, {USER_TITLE}. Shall I go ahead?")
 
         deadline = time.time() + float(CONFIG.get("assistant", {}).get("approval_timeout", 45))
         while self.awaiting_approval and time.time() < deadline:
@@ -14993,6 +15186,21 @@ difference() { plate_body(); holes(); }''',
                             detail=f"{len(steps)} steps: {request}",
                             outcome="approved" if ok else "refused")
         return ok
+
+    def confirm_then(self, name, detail, action, question=None):
+        """Ask first, and do `action` only on a yes - for things that cannot
+        be undone. Waits on its own thread, for the reason request_approval
+        gives; returns at once so the yes can be heard."""
+        if self.awaiting_approval:
+            self.speak("I'm still waiting on an answer to the last thing, Sir.")
+            return True
+
+        def run():
+            if self.request_approval(name, [{"action": name, "value": detail}], name,
+                                     question=question):
+                action()
+        threading.Thread(target=run, daemon=True, name="confirm").start()
+        return True
 
     def resolve_approval(self, approved):
         """Called by the UI or by a spoken yes/no."""
@@ -17706,24 +17914,19 @@ RULES
     def execute_pc_automation(self, cmd_text):
         cmd = cmd_text.lower().strip()
 
-        # In-App Dynamic Cards Internal Execution Demos
-        if "carousel" in cmd or "social media" in cmd:
-            carousel_items = ["Post #1: Tech Insights", "Post #2: AI Trends", "Post #3: Python Automation"]
-            self.instantiate_card("Social Media Carousel", "carousel", carousel_items)
-            self.speak("Retrieved social media carousel cards, Sir.")
-            return True
-
-        if "check bugs" in cmd or "check code" in cmd or "debug code" in cmd:
-            bug_report = "File: main.py\nLine 42: NullPointerException potential.\nRecommendation: Add safety check for 'user_id'."
-            self.instantiate_card("Code Audit Report", "code_bug", bug_report)
-            self.speak("Instantiated code bug analysis card.")
-            return True
-
         # --- CODING ENGINE ---
+        # (Two demo stubs used to sit here and answered with made-up content:
+        # any mention of "social media" showed invented posts, and "check
+        # code" showed a fabricated bug report without reading any code.)
         if any(k in cmd for k in ["run the code", "run it", "execute the code", "run this code", "run my code"]):
             return self.run_code()
-        if any(k in cmd for k in ["fix the code", "debug the code", "fix my code", "fix this code", "fix the bug"]):
+        if any(k in cmd for k in ["fix the code", "debug the code", "fix my code", "fix this code", "fix the bug",
+                                  "debug code", "debug my code", "debug this code"]):
             return self.fix_code()
+        if any(k in cmd for k in ["check code", "check the code", "check my code", "check this code",
+                                  "check for bugs", "check bugs", "review the code", "review my code",
+                                  "review this code", "find the bugs", "find bugs"]):
+            return self.review_code()
         improve = re.search(r'(?:improve|refactor|optimi[sz]e|change)\s+the\s+code\s+(?:to\s+|so\s+)?(.+)', cmd)
         if improve:
             return self.fix_code(improve.group(1).strip())
@@ -17746,7 +17949,9 @@ RULES
         # --- APP AUTOMATION ---
         if any(k in cmd for k in ["stop automation", "stop the automation", "abort automation", "cancel automation"]):
             return self.stop_automation()
-        auto_req = re.search(r'(?:automate|auto pilot|autopilot|do this for me)[:,]?\s*(.+)', cmd)
+        # Anchored: "how do I automate my backups?" is a question, and used to
+        # set her driving the mouse and keyboard to "my backups?".
+        auto_req = re.match(_LEAD + r'(?:automate|auto ?pilot|do this for me)\b[:,]?\s*(.+)', cmd)
         if auto_req:
             return self.ai_automate(auto_req.group(1).strip())
         macro_run = re.search(r'run (?:the )?macro (.+)', cmd)
@@ -17905,11 +18110,20 @@ RULES
                 self.speak(f"{len(issues)} features need configuring, Sir.")
             return True
 
-        # --- PHONE / VR (switched off in this build) ---
-        if any(k in cmd for k in ["phone bridge", "connect my phone", "link my phone",
-                                  "pair my", "pairing code", "vr mode", "immersive mode",
-                                  "webxr", "virtual reality", "remote access"]):
-            self.speak("Phone and VR modes are switched off in this build.")
+        # --- LISTENING ---
+        if re.fullmatch(_LEAD + r"(?:stop listening|go to sleep|mute yourself|"
+                        r"(?:mute|turn off|switch off) (?:the |your )?(?:mic|microphone))" + _TAIL, cmd):
+            return self.voice_mute(True)
+        if re.fullmatch(_LEAD + r"(?:start listening|wake up|unmute(?: yourself)?|"
+                        r"(?:unmute|turn on|switch on) (?:the |your )?(?:mic|microphone))" + _TAIL, cmd):
+            return self.voice_mute(False)
+
+        # --- VR (switched off in this build) ---
+        # Phone phrases used to be caught here too, which answered "pair my
+        # phone" - the exact words the phone app tells you to say - with
+        # "switched off". They now reach the remote control commands below.
+        if any(k in cmd for k in ["vr mode", "immersive mode", "webxr", "virtual reality"]):
+            self.speak("VR mode is switched off in this build.")
             return True
         if any(k in cmd for k in ["don't let the pc sleep", "keep the pc awake",
                                   "stop the pc sleeping", "never sleep"]):
@@ -17994,25 +18208,28 @@ RULES
             return True
 
         # --- REMOTE CONTROL ---
-        if re.search(r"(?:enable|turn on|start) (?:the )?(?:remote|phone)(?: control| link)?", cmd):
+        if re.search(r"(?:enable|turn on|start) (?:the )?(?:remote|phone)(?: control| link| access| bridge)?", cmd):
             return bool(self.remote.start())
-        if re.search(r"(?:disable|turn off|stop) (?:the )?(?:remote|phone)(?: control| link)?", cmd):
+        if re.search(r"(?:disable|turn off|stop) (?:the )?(?:remote|phone)(?: control| link| access| bridge)?", cmd):
             return bool(self.remote.stop())
-        if re.search(r"(?:pair|connect) (?:my |the )?phone|pairing code", cmd):
+        if re.search(r"(?:pair|connect|link) (?:with |to )?(?:my |the )?phone|pairing code|phone bridge", cmd):
             self.remote.start()
             return True
 
         # --- ATTACHMENTS ---
+        # Not "open file explorer" / "file manager": those are apps, and were
+        # being treated as "attach a file called explorer".
         attach = re.search(r"(?:attach|read|open|look at|summarise|summarize) "
-                           r"(?:the )?(?:file|document|pdf) ?(.*)", cmd)
+                           r"(?:the )?(?:file|document|pdf)"
+                           r"(?!\s*(?:explorer|manager|history|location|path|menu)\b) ?(.*)", cmd)
         if attach:
             return self.attach_file(attach.group(1).strip() or None)
         if re.search(r"\battach a file\b|\bpick a file\b|\bchoose a file\b", cmd):
             return self.attach_file()
 
         # --- ACTION LOG ---
-        if re.search(r"what (have you|did you) (done|do)|your action log|"
-                     r"show (me )?(your |the )?(action )?log", cmd):
+        if re.search(r"what (have you|did you) (done|do)\b|\byour action log\b|"
+                     r"\bshow (me )?(your |the )?(action )?log\b", cmd):
             m = re.search(r"last (\d+) hours?", cmd)
             return self.show_action_log(int(m.group(1)) if m else 24)
 
@@ -18023,7 +18240,7 @@ RULES
             g = routine_add.groups()
             days, raw_time, what = ("daily", g[0], g[1]) if len(g) == 2 else (g[0] + "s", g[1], g[2])
             return self.add_routine(what[:40], _parse_clock(raw_time), what, days)
-        if re.search(r"(list|what) routines|my routines", cmd):
+        if re.search(r"\b(list|what) routines\b|\bmy routines\b", cmd):
             return self.list_routines()
         routine_rm = re.search(r"(?:remove|delete|stop|cancel) (?:the )?routine (.+)", cmd)
         if routine_rm:
@@ -18121,14 +18338,19 @@ RULES
             return True
 
         # --- PROJECTS ---
-        pstart = re.search(r'(?:start|begin|open|create|switch to|work on)\s+(?:a\s+)?project\s+(?:called\s+|named\s+)?(.+)', cmd)
+        # "a new project" and "switch project to X" were missed, and "start a
+        # new project called garden" went on to be opened as an app.
+        pstart = (re.search(r'(?:start|begin|open|create|make|switch to|work on)\s+(?:a\s+)?(?:new\s+)?'
+                            r'project\s+(?:called\s+|named\s+)?(.+)', cmd)
+                  or re.search(r'switch (?:the )?project to\s+(.+)', cmd))
         if pstart:
             return self.project_start(pstart.group(1).strip())
         if any(k in cmd for k in ["end project", "close project", "stop working on", "finish project"]):
             return self.project_end()
         if any(k in cmd for k in ["list projects", "my projects", "what projects", "show projects"]):
             return self.project_list()
-        if any(k in cmd for k in ["project status", "current project", "what am i working on"]):
+        if any(k in cmd for k in ["project status", "current project", "what am i working on",
+                                  "what project am i on", "which project am i on"]):
             return self.project_status()
 
         # --- CALENDAR ---
@@ -18146,7 +18368,8 @@ RULES
         # --- HOME AUTOMATION ---
         home = re.search(r'turn\s+(on|off)\s+(?:the\s+)?(.+)', cmd)
         if home and not any(k in cmd for k in ["wifi", "display", "screen", "monitor",
-                                               "gesture", "security", "sentinel", "camera", "pc", "computer"]):
+                                               "gesture", "security", "sentinel", "camera", "pc", "computer",
+                                               "laptop", "bluetooth", "mic", "sound", "volume"]):
             return self.home_control(home.group(1), home.group(2).strip())
         if any(k in cmd for k in ["what's on at home", "home status", "which lights are on", "smart home status"]):
             return self.home_status()
@@ -18242,7 +18465,10 @@ RULES
         if any(k in cmd for k in ["show my notes", "read my notes", "list my notes",
                                   "what are my notes", "my notes", "show notes"]):
             return self.list_notes()
-        note = re.search(r'(?:note|jot down|make a note)\s*(?:that|:)?\s*(.+)', cmd)
+        # At the start of the request and as a whole word: unanchored, "note"
+        # matched inside "launch notepad" and saved "pad" as a note.
+        note = re.search(r"^(?:(?:can|could|would) you |please )*"
+                         r"(?:take a note|make a note|note down|jot down|note)\b[:,]?\s*(?:that\s+)?(.+)", cmd)
         if note and not cmd.startswith(("show", "read", "list", "what")):
             return self.quick_note(note.group(1).strip())
         if any(k in cmd for k in ["word count", "how many words", "count the words"]):
@@ -18339,10 +18565,9 @@ RULES
             return self.calendar_agenda(7)
 
         # --- HOME AUTOMATION ---
-        home = re.search(r'turn\s+(on|off)\s+(?:the\s+)?(.+)', cmd)
-        if home and not any(k in cmd for k in ["wifi", "wi-fi", "display", "screen", "monitor",
-                                               "gestures", "camera", "security", "sentinel"]):
-            return self.home_control(home.group(1), home.group(2).strip())
+        # (A second copy of the "turn on/off" matcher stood here, without the
+        # first one's exclusions, so it caught exactly what that one passed
+        # on: "turn off the computer" went to the smart home.)
         tog = re.search(r'toggle\s+(?:the\s+)?(.+)', cmd)
         if tog and any(k in cmd for k in ["light", "lamp", "fan", "plug", "switch", "heater"]):
             return self.home_control("toggle", tog.group(1).strip())
@@ -18421,16 +18646,20 @@ RULES
             return self.set_conversation_mode(False)
 
         # --- TEXTING & CALLING ---
-        sms = re.search(r'(?:text|message|sms)\s+(.+?)\s+(?:saying|that says?|about|and say|:)\s*(.+)', cmd)
+        # Anchored to the start of the request. Matching anywhere, "remind me
+        # to call mum at 6" phoned mum, and "what does this error message say
+        # about memory" tried to text someone called "say".
+        sms = re.match(_LEAD + r'(?:send (?:a )?)?(?:text|message|sms)(?: to)?\s+(.+?)\s+'
+                       r'(?:saying|that says?|about|and say|:)\s*(.+)', cmd)
         if sms:
             recip, msg = sms.group(1).strip(), sms.group(2).strip()
             threading.Thread(target=self.send_sms, args=(recip, msg), daemon=True).start()
             return True
-        sms2 = re.search(r'(?:send (?:a )?(?:text|message|sms) to)\s+(.+)', cmd)
+        sms2 = re.match(_LEAD + r'(?:send (?:a )?(?:text|message|sms) to)\s+(.+)', cmd)
         if sms2 and "saying" not in cmd:
             self.speak("What should the message say, Sir?")
             return True
-        call = re.search(r'\b(?:call|phone|ring|dial)\s+(.+)', cmd)
+        call = re.match(_LEAD + r'(?:call|phone|ring|dial)\s+(.+)', cmd)
         if call and not any(k in cmd for k in ["called", "calling card", "recall"]):
             target = call.group(1).strip()
             saying = re.search(r'\s+and (?:say|tell them)\s+(.+)', target)
@@ -18526,13 +18755,29 @@ RULES
             return self.recall_facts()
         if any(k in cmd for k in ["flip a coin", "roll a dice", "roll a die", "pick between", "choose between", "random number"]):
             return self.random_choice(cmd)
-        if any(k in cmd for k in ["empty recycle bin", "empty the recycle bin", "clean up", "system cleanup", "empty trash"]):
-            return self.system_cleanup()
+        # Emptying the Recycle Bin deletes for good. It used to run on any
+        # sentence containing "clean up" ("help me clean up this paragraph"),
+        # without asking.
+        if re.search(r"\bempty (?:the |my )?(?:recycle bin|recycling bin|bin|trash)\b|"
+                     r"\b(?:system clean ?up|clean up (?:the |my )?(?:pc|computer|system|recycle bin))\b", cmd):
+            return self.confirm_then("Empty the Recycle Bin", "Everything in it is deleted for good.",
+                                     self.system_cleanup,
+                                     question="Empty the recycle bin, Sir? Those files can't be recovered. "
+                                              "Say yes to confirm.")
 
         # --- Time & date ---
-        if any(kw in cmd for kw in ["what time", "what's the time", "current time", "tell me the time"]):
+        # Whole requests only. As substrings, "what time does the shop close"
+        # and "what day is the match" got the current time and date read out.
+        world = re.fullmatch(_LEAD + r"(?:what(?:'s| is) the (?:current )?time|what time is it|"
+                             r"(?:the )?(?:current )?time) in (.+?)" + _TAIL, cmd)
+        if world and self.world_time(world.group(1)):
+            return True
+        if re.fullmatch(_LEAD + r"(?:what(?:'s| is) the (?:current )?time|what time is it|"
+                        r"tell me the time|(?:the )?(?:current )?time)" + _TAIL, cmd):
             return self.tell_time()
-        if any(kw in cmd for kw in ["what day", "what's the date", "what is the date", "today's date", "what date"]):
+        if re.fullmatch(_LEAD + r"(?:what(?:'s| is) (?:the |today's )?date|what day is (?:it|today)|"
+                        r"what(?:'s| is) today(?:'s date)?|today's date|what date is it|"
+                        r"(?:the )?date)(?: today)?" + _TAIL, cmd):
             return self.tell_date()
 
         # --- System status / battery ---
@@ -18554,12 +18799,20 @@ RULES
             return self.set_brightness(int(bri.group(1)))
         if any(k in cmd for k in ["turn off the display", "turn off screen", "turn off the monitor", "sleep the display", "sleep display"]):
             return self.sleep_display()
-        if any(k in cmd for k in ["go to sleep", "sleep the pc", "sleep the computer", "put the pc to sleep", "put the computer to sleep"]):
+        # Power. "Go to sleep" used to be here and put the whole PC to sleep;
+        # said to an assistant it means "stop listening", and is handled so.
+        # Restart and shutdown lose unsaved work, so they are confirmed first.
+        machine = r"(?:the |my |this )?(?:pc|computer|laptop)\b(?!\s+(?:screen|display|monitor|sounds?|volume|speakers?|camera|mic|microphone|fan))"
+        if re.search(r"\b(?:sleep|suspend) " + machine + r"|\bput " + machine + r" to sleep", cmd):
             return self.power_action("sleep")
-        if any(k in cmd for k in ["restart the pc", "restart the computer", "reboot the pc", "reboot the computer", "restart my computer"]):
-            return self.power_action("restart")
-        if any(k in cmd for k in ["shutdown the pc", "shut down the pc", "shutdown the computer", "shut down the computer", "power off the pc", "turn off the computer", "turn off the pc"]):
-            return self.power_action("shutdown")
+        if re.search(r"\b(?:restart|reboot) " + machine, cmd):
+            return self.confirm_then("Restart the PC", "Unsaved work in other apps will be lost.",
+                                     lambda: self.power_action("restart"),
+                                     question="Restart the computer, Sir? Say yes to confirm.")
+        if re.search(r"\b(?:shut ?down|power off|power down|turn off|switch off) " + machine, cmd):
+            return self.confirm_then("Shut down the PC", "Unsaved work in other apps will be lost.",
+                                     lambda: self.power_action("shutdown"),
+                                     question="Shut the computer down, Sir? Say yes to confirm.")
         if any(k in cmd for k in ["turn on wifi", "enable wifi", "turn wifi on", "enable wi-fi", "turn on wi-fi"]):
             return self.toggle_wifi(True)
         if any(k in cmd for k in ["turn off wifi", "disable wifi", "turn wifi off", "disable wi-fi", "turn off wi-fi"]):
@@ -18591,6 +18844,20 @@ RULES
             unit = rmatch.group(3)
             mult = {"second": 1, "minute": 60, "hour": 3600}[unit]
             return self.add_reminder(task, amount * mult)
+        # At a clock time. Only "in N minutes" used to work, so these went to
+        # the model, which replied "I'll remind you" and never did.
+        clock = r"(\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)"
+        days = r"(today|tonight|tomorrow)"
+        for pat, order in (
+                (r"remind me to (.+?) (?:at|by) " + clock + r"(?:\s+" + days + r")?", "wtd"),
+                (r"remind me to (.+?) " + days + r" at " + clock, "wdt"),
+                (r"remind me " + days + r" at " + clock + r" to (.+?)", "dtw"),
+                (r"set (?:a |an )?reminder (?:for )?(?:" + days + r" )?(?:at|for) " + clock
+                 + r" to (.+?)", "dtw")):
+            m = re.fullmatch(_LEAD + pat + _TAIL, cmd)
+            if m:
+                got = dict(zip(order, m.groups()))
+                return self.remind_at(got["w"].strip(), got["t"], got.get("d"))
 
         # --- Web actions (one path: builds the exact URL and opens it) ---
         # Handles "play the sidemen on youtube", "search X on amazon", maps,
@@ -18901,13 +19168,14 @@ RULES
             return
         cmd_lower = cmd.lower()
 
-        # Close the Amy app itself — but NOT when the user means the whole PC.
-        pc_power = any(p in cmd_lower for p in ["the pc", "the computer", "my pc", "my computer", "the system"])
-        if (("exit amy" in cmd_lower)
-                or ("shutdown amy" in cmd_lower) or ("shut down amy" in cmd_lower)
-                or ("close amy" in cmd_lower)
-                or ("shutdown" in cmd_lower and "core" in cmd_lower)
-                or ("shutdown" in cmd_lower and not pc_power and "restart" not in cmd_lower)):
+        # Close the Amy app itself - only when that is what was asked. This
+        # used to be a substring test, so any sentence containing "shutdown"
+        # closed her: "what caused the government shutdown?" quit the app.
+        # Shutting down the PC is a separate, confirmed command further on.
+        if (re.search(r"\b(?:exit|close|quit|shut ?down) amy(?![\w'’])", cmd_lower)
+                or re.search(r"\bshut ?down (?:the )?(?:system )?core\b", cmd_lower)
+                or re.fullmatch(r"(?:amy,? )?(?:please )?shut ?down(?: now)?(?: please)?[.!]?",
+                                cmd_lower.strip())):
             self.speak("Deactivating system core. Goodbye, Sir.")
             time.sleep(1.0)
             self.close_app()

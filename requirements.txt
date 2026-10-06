@@ -32,6 +32,7 @@ pypdf
 python-docx
 playwright
 reportlab
+tzdata              # time zones for "what's the time in Tokyo" (Windows ships none)
 
 # Optional upgrades
 faster-whisper      # offline, accurate speech recognition (used automatically when installed)
